@@ -59,13 +59,9 @@ stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = nc
 
 ``` r
 library(rstan)
-#> Loading required package: StanHeaders
-#> rstan (Version 2.12.1, packaged: 2016-09-11 13:07:50 UTC, GitRev: 85f7a56811da)
-#> For execution on a local, multicore CPU with excess RAM we recommend calling
-#> rstan_options(auto_write = TRUE)
-#> options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
+ctl <- list(adapt_delta = 0.95)
 ```
 
 ``` r
@@ -87,12 +83,31 @@ writeLines(readLines("tmm.stan"))
 #>   beta ~ student_t(5, 0, 2);   // prior
 #>   y_meas ~ normal(alpha + X * beta, sigma); // likelihood
 #> }
-ctl <- list(adapt_delta = 0.95)
 ```
 
 ``` r
 m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
+```
+
+``` r
 m_basic
+#> Inference for Stan model: tmm.
+#> 4 chains, each with iter=2000; warmup=1000; thin=1; 
+#> post-warmup draws per chain=1000, total post-warmup draws=4000.
+#> 
+#>          mean se_mean   sd  2.5%   25%   50%   75% 97.5% n_eff Rhat
+#> beta[1]  0.26    0.00 0.11  0.05  0.20  0.26  0.33  0.46  1388    1
+#> beta[2] -0.05    0.00 0.02 -0.09 -0.06 -0.05 -0.03  0.00  1740    1
+#> beta[3] -0.21    0.00 0.09 -0.39 -0.27 -0.21 -0.15 -0.02  1426    1
+#> beta[4]  0.08    0.00 0.04 -0.01  0.05  0.08  0.10  0.15  1383    1
+#> alpha    0.82    0.01 0.23  0.36  0.67  0.81  0.96  1.29  1346    1
+#> sigma    0.10    0.00 0.03  0.06  0.08  0.10  0.11  0.16  1258    1
+#> lp__    27.41    0.08 2.22 21.90 26.18 27.86 29.05 30.47   841    1
+#> 
+#> Samples were drawn using NUTS(diag_e) at Fri Dec  9 11:20:23 2016.
+#> For each parameter, n_eff is a crude measure of effective sample size,
+#> and Rhat is the potential scale reduction factor on split chains (at 
+#> convergence, Rhat=1).
 ```
 
 Measurement error model:
@@ -130,7 +145,27 @@ writeLines(readLines("tmm-meas.stan"))
 ``` r
 m_meas <- stan("tmm-meas.stan", data = stan_dat, 
   pars = c("y", "y_raw"), include = FALSE, control = ctl)
+```
+
+``` r
 m_meas
+#> Inference for Stan model: tmm-meas.
+#> 4 chains, each with iter=2000; warmup=1000; thin=1; 
+#> post-warmup draws per chain=1000, total post-warmup draws=4000.
+#> 
+#>           mean se_mean   sd   2.5%    25%    50%    75% 97.5% n_eff Rhat
+#> beta[1]   0.29    0.00 0.17  -0.06   0.17   0.29   0.40  0.62  2188    1
+#> beta[2]  -0.06    0.00 0.05  -0.15  -0.09  -0.06  -0.02  0.04  3034    1
+#> beta[3]  -0.22    0.00 0.20  -0.61  -0.35  -0.22  -0.09  0.17  2159    1
+#> beta[4]   0.08    0.00 0.08  -0.08   0.02   0.08   0.13  0.24  2117    1
+#> alpha     0.81    0.01 0.37   0.11   0.57   0.81   1.05  1.54  2212    1
+#> sigma     0.05    0.00 0.04   0.00   0.02   0.04   0.08  0.16  2701    1
+#> lp__    -15.29    0.09 3.50 -22.89 -17.50 -14.97 -12.79 -9.32  1650    1
+#> 
+#> Samples were drawn using NUTS(diag_e) at Fri Dec  9 11:20:28 2016.
+#> For each parameter, n_eff is a crude measure of effective sample size,
+#> and Rhat is the potential scale reduction factor on split chains (at 
+#> convergence, Rhat=1).
 ```
 
 ``` r
@@ -140,7 +175,7 @@ posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE)
 mcmc_trace(posterior)
 ```
 
-![](tmm_files/figure-markdown_github/unnamed-chunk-11-1.png)
+![](tmm_files/figure-markdown_github/unnamed-chunk-13-1.png)
 
 ``` r
 names(as.data.frame(X))
@@ -150,26 +185,26 @@ names(as.data.frame(X))
 mcmc_areas(as.matrix(m_meas), regex_pars = "beta")
 ```
 
-![](tmm_files/figure-markdown_github/unnamed-chunk-11-2.png)
+![](tmm_files/figure-markdown_github/unnamed-chunk-13-2.png)
 
 ``` r
 mcmc_areas(as.matrix(m_basic), regex_pars = "beta")
 ```
 
-![](tmm_files/figure-markdown_github/unnamed-chunk-11-3.png)
+![](tmm_files/figure-markdown_github/unnamed-chunk-13-3.png)
 
 ``` r
 
 mcmc_intervals(as.matrix(m_meas), regex_pars = "beta")
 ```
 
-![](tmm_files/figure-markdown_github/unnamed-chunk-11-4.png)
+![](tmm_files/figure-markdown_github/unnamed-chunk-13-4.png)
 
 ``` r
 mcmc_intervals(as.matrix(m_basic), regex_pars = "beta")
 ```
 
-![](tmm_files/figure-markdown_github/unnamed-chunk-11-5.png)
+![](tmm_files/figure-markdown_github/unnamed-chunk-13-5.png)
 
 ``` r
 library(broom)

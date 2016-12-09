@@ -53,7 +53,7 @@ X <- model.matrix(dNr ~ 0 + HASAve + LFTADen * RemovTreat, data = d_sum)
 stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X)
 ```
 
-```{r}
+```{r, message=FALSE}
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
@@ -66,6 +66,9 @@ writeLines(readLines("tmm.stan"))
 
 ```{r, results='hide'}
 m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
+```
+
+```{r}
 m_basic
 ```
 
@@ -78,6 +81,9 @@ writeLines(readLines("tmm-meas.stan"))
 ```{r, results='hide'}
 m_meas <- stan("tmm-meas.stan", data = stan_dat, 
   pars = c("y", "y_raw"), include = FALSE, control = ctl)
+```
+
+```{r}
 m_meas
 ```
 
