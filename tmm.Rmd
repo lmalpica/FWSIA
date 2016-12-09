@@ -1,0 +1,88 @@
+---
+title: "Stan model"
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+# Data
+
+This loads a file containing posterior distributions for six Trophic Niche Metrics (TNM): dNr, dCr, TA, CD, MNND, and SDNND, from 16 different reef sites. Data file also contains three reef variables: LFTADen (Lionfish density /100m2), HASAve (averaged score of habitat complexity), and lionfish removal treatment (binary, yes/no).
+
+```{r}
+d <- read.csv("data/FullCommNoLF.csv")
+```
+
+# Quick model
+
+```{r}
+d_logged <- group_by(d, Site) %>%
+  mutate_each(funs(log), dNr:SDNND)
+
+d_means <- d_logged %>%
+  summarise_each(funs(mean))
+
+d_sds <- d_logged %>%
+  summarise_each(funs(sd), dNr:SDNND) %>%
+  dplyr::select(-Site)
+names(d_sds) <- paste0(names(d_sds), "_sd")
+
+d_sum <- data.frame(d_means, d_sds)
+m1 <- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
+arm::display(m1)
+```
+
+# Stan
+
+Same model to check:
+
+```{r}
+# d_sum <- d_sum %>% mutate() # standardize?
+X <- model.matrix(dNr ~ 0 + HASAve + LFTADen * RemovTreat, data = d_sum)
+stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X)
+```
+
+```{r}
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+```
+
+```{r}
+writeLines(readLines("tmm.stan"))
+ctl <- list(adapt_delta = 0.95)
+m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
+m_basic
+```
+
+Measurement error model:
+
+```{r}
+writeLines(readLines("tmm-meas.stan"))
+m_meas <- stan("tmm-meas.stan", data = stan_dat, 
+  pars = c("y", "y_raw"), include = FALSE, control = ctl)
+m_meas
+```
+
+```{r}
+library(bayesplot)
+posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE)
+mcmc_trace(posterior)
+names(as.data.frame(X))
+
+mcmc_areas(as.matrix(m_meas), regex_pars = "beta")
+mcmc_areas(as.matrix(m_basic), regex_pars = "beta")
+
+mcmc_intervals(as.matrix(m_meas), regex_pars = "beta")
+mcmc_intervals(as.matrix(m_basic), regex_pars = "beta")
+```
+
+```{r}
+library(broom)
+b_basic <- tidyMCMC(m_basic, estimate.method = "median", conf.int = TRUE)
+b_meas <- tidyMCMC(m_meas, estimate.method = "median", conf.int = TRUE)
+```
+
+Other responses...
