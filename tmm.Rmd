@@ -1,8 +1,17 @@
 ---
-title: "Stan model"
+title: "Stan models"
+date: "`r Sys.Date()`"
+output: rmarkdown::github_document
 ---
 
-```{r}
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r, message=FALSE}
 library(dplyr)
 library(ggplot2)
 ```
@@ -48,11 +57,14 @@ stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = nc
 library(rstan)
 rstan_options(auto_write = TRUE)
 options(mc.cores = parallel::detectCores())
+ctl <- list(adapt_delta = 0.95)
 ```
 
 ```{r}
 writeLines(readLines("tmm.stan"))
-ctl <- list(adapt_delta = 0.95)
+```
+
+```{r, results='hide'}
 m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
 m_basic
 ```
@@ -61,6 +73,9 @@ Measurement error model:
 
 ```{r}
 writeLines(readLines("tmm-meas.stan"))
+```
+
+```{r, results='hide'}
 m_meas <- stan("tmm-meas.stan", data = stan_dat, 
   pars = c("y", "y_raw"), include = FALSE, control = ctl)
 m_meas
