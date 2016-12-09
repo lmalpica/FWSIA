@@ -16,8 +16,9 @@ FullCommNoLF <- read.table("data/FullCommNoLF.csv",sep=",", header=T)
 
 Next code run linear model with each TNM as response variable regressed against the three predictive reef variables. It creates a bootstrapped routine drawing 1000 samples per site. 
 
+#Bootstrap dNr
+
 ```{r}
-#Bootstrap dNr####
 iter <- 1000
 dNr <- data.frame(Int = rep(NA, iter), HASAve = rep(NA, iter), LFTADen = rep(NA, iter), 
                     RemovTreatR = rep(NA, iter), LFTADenRemovTreatR = rep(NA, iter))
@@ -27,8 +28,6 @@ for (i in 1:iter){
   dNr[i,] <- as.numeric(coef(moddNr))  
 } 
 ```
-
-#dNr 95% CI and visualize coefficient distributions
 
 ```{r}
 #estimate CI (2.5%, 97.5%) 
@@ -56,8 +55,6 @@ for (i in 1:iter){
 } 
 ```
 
-#dCr 95% CI and visualize coefficient distributions
-
 ```{r}
 #estimate parametric bootstrap CI (2.5%, 97.5%) 
 quantile(dCr[,2], c(.025, 0.975))
@@ -65,6 +62,7 @@ quantile(dCr[,3], c(.025, 0.975))
 quantile(dCr[,4], c(.025, 0.975))
 quantile(dCr[,5], c(.025, 0.975))
 
+#coefficient distributions
 ggplot(data=dCr, aes(dCr[,2])) + geom_histogram() #HASAve
 ggplot(data=dCr, aes(dCr[,3])) + geom_histogram() #LFTADen
 ggplot(data=dCr, aes(dCr[,4])) + geom_histogram() #RemovTreatR
@@ -92,6 +90,7 @@ quantile(TA[,3], c(.025, 0.975))
 quantile(TA[,4], c(.025, 0.975))
 quantile(TA[,5], c(.025, 0.975))
 
+#coefficient distributions
 ggplot(data=TA, aes(TA[,2])) + geom_histogram() #HASAve
 ggplot(data=TA, aes(TA[,3])) + geom_histogram() #LFTADen
 ggplot(data=TA, aes(TA[,4])) + geom_histogram() #RemovTreatR
@@ -110,8 +109,6 @@ for (i in 1:iter){
 } 
 ```
 
-#CD 95% CI and visualize coefficient distributions
-
 ```{r}
 #estimate parametric bootstrap CI (2.5%, 97.5%) 
 quantile(CD[,2], c(.025, 0.975))
@@ -119,6 +116,7 @@ quantile(CD[,3], c(.025, 0.975))
 quantile(CD[,4], c(.025, 0.975))
 quantile(CD[,5], c(.025, 0.975))
 
+#coefficient distributions
 ggplot(data=CD, aes(CD[,2])) + geom_histogram() #HASAve
 ggplot(data=CD, aes(CD[,3])) + geom_histogram() #LFTADen
 ggplot(data=CD, aes(CD[,4])) + geom_histogram() #RemovTreatR
@@ -137,8 +135,6 @@ for (i in 1:iter){
 } 
 ```
 
-#MNND 95% CI and visualize coefficient distributions
-
 ```{r}
 #estimate parametric bootstrap CI (2.5%, 97.5%) 
 quantile(MNND[,2], c(.025, 0.975))
@@ -146,6 +142,7 @@ quantile(MNND[,3], c(.025, 0.975))
 quantile(MNND[,4], c(.025, 0.975))
 quantile(MNND[,5], c(.025, 0.975))
 
+#coefficient distributions
 ggplot(data=MNND, aes(MNND[,2])) + geom_histogram() #HASAve
 ggplot(data=MNND, aes(MNND[,3])) + geom_histogram() #LFTADen
 ggplot(data=MNND, aes(MNND[,4])) + geom_histogram() #RemovTreatR
@@ -165,8 +162,6 @@ for (i in 1:iter){
 } 
 ```
 
-#SDNND 95% CI and visualize coefficient distributions
-
 ```{r}
 #estimate parametric bootstrap CI (2.5%, 97.5%) 
 print(ConfIntHAS <- quantile(SDNND[,2], c(.025, 0.975)))
@@ -174,15 +169,17 @@ print(ConfIntLF <- quantile(SDNND[,3], c(.025, 0.975)))
 print(ConfIntTreat <- quantile(SDNND[,4], c(.025, 0.975)))
 print(ConfIntLFTreat <- quantile(SDNND[,5], c(.025, 0.975)))
 
+#coefficient distributions
 ggplot(data=SDNND, aes(SDNND[,2])) + geom_histogram() #HASAve
 ggplot(data=SDNND, aes(SDNND[,3])) + geom_histogram() #LFTADen
 ggplot(data=SDNND, aes(SDNND[,4])) + geom_histogram() #RemovTreatR
 ggplot(data=SDNND, aes(SDNND[,5])) + geom_histogram() #LFTADen*RemovTreatR
 ```
 
-#Next chunk arranges coefficient mean and SD to create coefficient plot (it's a bit messy)
+#Coeff plot
 
 ```{r, echo=FALSE}
+#Next chunk arranges coefficient mean and SD to create coefficient plot (it's a bit messy)
 # Put model estimates into temporary data.frames:
 model1Frame <- data.frame(Variable = colnames(dNr),
                           Coefficient = t(dNr %>% summarise_each(funs(mean))),
