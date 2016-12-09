@@ -252,8 +252,8 @@ Here we will extract the posteriors from the models and reformat the output for 
 stopifnot(identical(mean(d$RemovTreat), 0.5)) # Just in case! 
 p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
 names(p)[2:5] <- names(as.data.frame(X))
-p <- mutate(p, LFTADen_w_removal = RemovTreat + 0.5 * `LFTADen:RemovTreat`,
-  LFTADen_no_removal = RemovTreat - 0.5 * `LFTADen:RemovTreat`)
+p <- mutate(p, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
+  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`)
 p <- select(p, -alpha, -sigma, -`lp__`) %>% # cleaning up 
   rename(Response = `.id`)
 p <- reshape2::melt(p) # make a long format for ggplot
@@ -312,21 +312,21 @@ knitr::kable(sum_table)
 | LFTADen:RemovTreat   | dNr      |           0.18|            0.82|
 | LFTADen:RemovTreat   | MNND     |           0.48|            0.52|
 | LFTADen:RemovTreat   | TA       |           0.09|            0.91|
-| LFTADen\_w\_removal  | CD       |           0.71|            0.29|
-| LFTADen\_w\_removal  | dCr      |           0.71|            0.29|
-| LFTADen\_w\_removal  | dNr      |           0.36|            0.64|
-| LFTADen\_w\_removal  | MNND     |           0.58|            0.42|
-| LFTADen\_w\_removal  | TA       |           0.48|            0.52|
-| LFTADen\_no\_removal | CD       |           0.77|            0.23|
-| LFTADen\_no\_removal | dCr      |           0.83|            0.17|
-| LFTADen\_no\_removal | dNr      |           0.86|            0.14|
-| LFTADen\_no\_removal | MNND     |           0.60|            0.40|
-| LFTADen\_no\_removal | TA       |           0.97|            0.03|
+| LFTADen\_w\_removal  | CD       |           0.73|            0.27|
+| LFTADen\_w\_removal  | dCr      |           0.51|            0.49|
+| LFTADen\_w\_removal  | dNr      |           0.68|            0.32|
+| LFTADen\_w\_removal  | MNND     |           0.86|            0.14|
+| LFTADen\_w\_removal  | TA       |           0.65|            0.35|
+| LFTADen\_no\_removal | CD       |           0.67|            0.33|
+| LFTADen\_no\_removal | dCr      |           0.61|            0.39|
+| LFTADen\_no\_removal | dNr      |           0.89|            0.11|
+| LFTADen\_no\_removal | MNND     |           0.77|            0.23|
+| LFTADen\_no\_removal | TA       |           0.94|            0.06|
 
 Here's what I see:
 
 -   None of these effects are overly strong
 -   There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
--   There is a fairly high probability (ranging from 0.6 to 0.95) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`).
--   The effect of lionfish density looks a bit stronger (negative) in the case of no removals `LFTADen_no_removal`, although the interaction between lionfish density and treatment itself is very weak (or at least very uncertain) (see `LFTADen:RemovTreat`).
--   There is weak evidence for an effect of the habitat variable on the responses with the exception of one strongly positive relationship between the habitat variable and `MMND` with about 0.98 probability.
+-   There is a fairly high probability (ranging from 0.6 to 0.95) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`). This is for an average site, or in other words across all sites including those with and without removals.
+-   The effect of lionfish density looks a bit stronger (negative) in the case of no removals `LFTADen_no_removal`, BUT the interaction between lionfish density and treatment is very weak (or at least very uncertain) (see `LFTADen:RemovTreat`).
+-   There is weak evidence for an effect of the habitat variable on the responses with the exception of positive relationship between the habitat variables and `dNr` and `MMND`, with ~0.98 or 0.99 probability for the latter. (`HASAve`)
