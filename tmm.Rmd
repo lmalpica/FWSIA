@@ -1,0 +1,204 @@
+---
+title: "Stan models"
+date: "`r Sys.Date()`"
+output: rmarkdown::github_document
+---
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  cache = TRUE,
+  message = FALSE,
+  autodep = TRUE,
+  warning = FALSE,
+  cache.lazy = TRUE,
+  cache.comments = TRUE
+  )
+```
+
+```{r, message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+ctl <- list(adapt_delta = 0.99) # more robust than the default 
+library(bayesplot)
+# devtools::install_github("seananderson/stanhelpers") # if needed
+library(stanhelpers)
+```
+
+# Data
+
+This loads a file containing posterior distributions for six Trophic Niche
+Metrics (TNM): dNr, dCr, TA, CD, MNND, and SDNND, from 16 different reef sites.
+Data file also contains three reef variables: LFTADen (Lionfish density /100m2),
+HASAve (averaged score of habitat complexity), and lionfish removal treatment
+(binary, yes/no).
+
+```{r}
+d <- read.csv("data/FullCommNoLF.csv")
+```
+
+# Quick model
+
+```{r}
+d_logged <- group_by(d, Site) %>%
+  mutate_each(funs(log), dNr:SDNND)
+
+d_means <- d_logged %>%
+  summarise_each(funs(mean))
+
+d_sds <- d_logged %>%
+  summarise_each(funs(sd), dNr:SDNND) %>%
+  dplyr::select(-Site)
+names(d_sds) <- paste0(names(d_sds), "_sd")
+
+d_sum <- data.frame(d_means, d_sds)
+
+d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve), 
+  LFTADen = arm::rescale(LFTADen),
+  RemovTreat = arm::rescale(RemovTreat))
+
+m1 <- lm(dCr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
+arm::display(m1)
+```
+
+# Stan
+
+Same model to check:
+
+```{r}
+X <- model.matrix(dNr ~ 0 + HASAve + LFTADen * RemovTreat, data = d_sum)
+stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X)
+```
+
+```{r}
+writeLines(readLines("tmm.stan"))
+```
+
+```{r, results='hide'}
+m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
+```
+
+```{r}
+m_basic
+```
+
+That looks the same to me. 
+
+# Measurement error model
+
+Now let's use the following model that allows for measurement error on y:
+
+```{r}
+writeLines(readLines("tmm-meas.stan"))
+```
+
+```{r, results='hide'}
+m_meas <- stan("tmm-meas.stan", data = stan_dat, 
+  pars = c("y", "y_raw"), include = FALSE, control = ctl)
+```
+
+```{r}
+m_meas
+```
+
+We can inspect and plot the output:
+
+```{r}
+posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE)
+mcmc_trace(posterior)
+names(as.data.frame(X))
+
+mcmc_areas(as.matrix(m_meas), regex_pars = "beta")
+mcmc_areas(as.matrix(m_basic), regex_pars = "beta")
+
+# mcmc_intervals(as.matrix(m_meas), regex_pars = "beta")
+# mcmc_intervals(as.matrix(m_basic), regex_pars = "beta")
+```
+
+So the posteriors are definitely wider in the case when we allow for the measurement error. 
+
+# Other responses
+
+Now that the above models are working, let's apply them to the various responses. 
+
+The following function will format the data and fit the model for a given response. It also has the option of centering or not centering the removal variable. 
+
+```{r}
+fit_tmm <- function(response, center_removal = FALSE) {
+  d_sum <- data.frame(d_means, d_sds)
+  d_sum <- d_sum %>% mutate(
+    HASAve = arm::rescale(HASAve), 
+    LFTADen = arm::rescale(LFTADen))
+  if (center_removal) d_sum$RemovTreat - mean(d_sum$RemovTreat)
+  
+  f <- paste(response, "~ 0 + HASAve + LFTADen * RemovTreat")
+  X <- model.matrix(as.formula(f), data = d_sum)
+  stan_dat <- list(y_meas = d_sum[, response], tau = d_sum$dNr_sd, N = nrow(d_sum), 
+    K = ncol(X), X = X)
+  m <- stan("tmm-meas.stan", data = stan_dat,
+    pars = c("y", "y_raw"), include = FALSE, control = list(adapt_delta = 0.99), 
+    iter = 2000, chains = 4)
+  m
+}
+```
+
+Now let's apply the function to each of the responses. 
+
+```{r, results='hide'}
+responses <- names(d)[2:6]
+# out <- lapply(responses, fit_tmm, center_removal = FALSE)
+# names(out) <- responses
+out_cent <- lapply(responses, fit_tmm, center_removal = TRUE)
+names(out_cent) <- responses
+```
+
+Here we will extract the posteriors from the models and reformat the output for plotting. Also, we will calculate the effect of lionfish density for the case without removals (-0.5) and for the case with removals (0.5). 
+
+```{r}
+stopifnot(identical(mean(d$RemovTreat), 0.5)) # Just in case! 
+p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
+names(p)[2:5] <- names(as.data.frame(X))
+p <- mutate(p, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
+  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`)
+p <- select(p, -alpha, -sigma, -`lp__`) %>% # cleaning up 
+  rename(Response = `.id`)
+p <- reshape2::melt(p) # make a long format for ggplot
+```
+
+```{r coefficient-plot, fig.width=6.5, fig.height=6.5}
+labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3)
+ggplot(p, aes(variable, value, fill = Response, colour = Response)) + 
+  geom_hline(yintercept = 0, lty = 2) + xlab("") +
+  scale_y_continuous(breaks = log(labs), labels = labs) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5) +
+  coord_flip() +
+  viridis::scale_fill_viridis(discrete = TRUE) +
+  viridis::scale_color_viridis(discrete = TRUE) +
+  theme_light() +
+  ylab("Coefficient estimate")
+ggsave("figs/tmm-estimates.pdf", width = 6.5, height = 6.5)
+```
+
+In the above plot, I labeled the x axis with the exponentiated versions of the coefficients. These are the multiplicative effects. So, for example, a value of 0.6 means that the response will be 60% of what it was if the predictor increases by 2 standard deviations (or in the case of the treatment, the lionfish are removed).
+
+We can calculate the probability a given coefficient is above or less than 0 (i.e. the multiplicative effect is above or below 1) (because this is a Bayesian model). You can use these values when you report results. We can also calculate lots of other things depending on what would be meaningful (e.g. credible intervals on the effects).
+
+```{r}
+sum_table <- p %>% group_by(variable, Response) %>% 
+  summarize(
+    prob_less_0 = round(sum(value < 0)/n(), 2),
+    prob_above_0 = round(sum(value > 0)/n(), 2))
+knitr::kable(sum_table)
+```
+
+Here's what I see:
+
+- None of these effects are overly strong 
+- There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
+- There is a fairly high probability (ranging from 0.6 to 0.95) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`). This is for an average site, or in other words across all sites including those with and without removals. 
+- The effect of lionfish density looks a bit stronger (negative) in the case of no removals `LFTADen_no_removal`, BUT the interaction between lionfish density and treatment is very weak (or at least very uncertain) (see `LFTADen:RemovTreat`).
+- There is weak evidence for an effect of the habitat variable on the responses with the exception of positive relationship between the habitat variables and `dNr` and `MMND`, with ~0.98 or 0.99 probability for the latter. (`HASAve`)
