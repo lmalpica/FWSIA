@@ -1,5 +1,5 @@
 ---
-title: "Stan models"
+title: "TNM Stan models"
 date: "`r Sys.Date()`"
 output: rmarkdown::github_document
 ---
@@ -61,7 +61,11 @@ d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve),
   LFTADen = arm::rescale(LFTADen),
   RemovTreat = arm::rescale(RemovTreat))
 
-m1 <- lm(dCr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
+d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
+
+# reshape2::melt(d, )
+
+m1 <- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
 arm::display(m1)
 ```
 
@@ -75,11 +79,11 @@ stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = nc
 ```
 
 ```{r}
-writeLines(readLines("tmm.stan"))
+writeLines(readLines("tnm.stan"))
 ```
 
 ```{r, results='hide'}
-m_basic <- stan("tmm.stan", data = stan_dat, control = ctl)
+m_basic <- stan("tnm.stan", data = stan_dat, control = ctl)
 ```
 
 ```{r}
@@ -93,11 +97,11 @@ That looks the same to me.
 Now let's use the following model that allows for measurement error on y:
 
 ```{r}
-writeLines(readLines("tmm-meas.stan"))
+writeLines(readLines("tnm-meas.stan"))
 ```
 
 ```{r, results='hide'}
-m_meas <- stan("tmm-meas.stan", data = stan_dat, 
+m_meas <- stan("tnm-meas.stan", data = stan_dat, 
   pars = c("y", "y_raw"), include = FALSE, control = ctl)
 ```
 
@@ -107,16 +111,14 @@ m_meas
 
 We can inspect and plot the output:
 
-```{r}
-posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE)
+```{r stan-check-plots}
+posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE, pars = "y_pred", 
+  include = FALSE)
 mcmc_trace(posterior)
 names(as.data.frame(X))
 
 mcmc_areas(as.matrix(m_meas), regex_pars = "beta")
 mcmc_areas(as.matrix(m_basic), regex_pars = "beta")
-
-# mcmc_intervals(as.matrix(m_meas), regex_pars = "beta")
-# mcmc_intervals(as.matrix(m_basic), regex_pars = "beta")
 ```
 
 So the posteriors are definitely wider in the case when we allow for the measurement error. 
@@ -128,20 +130,14 @@ Now that the above models are working, let's apply them to the various responses
 The following function will format the data and fit the model for a given response. It also has the option of centering or not centering the removal variable. 
 
 ```{r}
-fit_tmm <- function(response, center_removal = FALSE) {
-  d_sum <- data.frame(d_means, d_sds)
-  d_sum <- d_sum %>% mutate(
-    HASAve = arm::rescale(HASAve), 
-    LFTADen = arm::rescale(LFTADen))
-  if (center_removal) d_sum$RemovTreat - mean(d_sum$RemovTreat)
-  
+fit_tnm <- function(response) {
   f <- paste(response, "~ 0 + HASAve + LFTADen * RemovTreat")
   X <- model.matrix(as.formula(f), data = d_sum)
   stan_dat <- list(y_meas = d_sum[, response], tau = d_sum$dNr_sd, N = nrow(d_sum), 
     K = ncol(X), X = X)
-  m <- stan("tmm-meas.stan", data = stan_dat,
+  m <- stan("tnm-meas.stan", data = stan_dat,
     pars = c("y", "y_raw"), include = FALSE, control = list(adapt_delta = 0.99), 
-    iter = 2000, chains = 4)
+    iter = 3000, chains = 4)
   m
 }
 ```
@@ -149,10 +145,8 @@ fit_tmm <- function(response, center_removal = FALSE) {
 Now let's apply the function to each of the responses. 
 
 ```{r, results='hide'}
-responses <- names(d)[2:6]
-# out <- lapply(responses, fit_tmm, center_removal = FALSE)
-# names(out) <- responses
-out_cent <- lapply(responses, fit_tmm, center_removal = TRUE)
+responses <- names(d)[2:7]
+out_cent <- lapply(responses, fit_tnm)
 names(out_cent) <- responses
 ```
 
@@ -161,26 +155,27 @@ Here we will extract the posteriors from the models and reformat the output for 
 ```{r}
 stopifnot(identical(mean(d$RemovTreat), 0.5)) # Just in case! 
 p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
-names(p)[2:5] <- names(as.data.frame(X))
-p <- mutate(p, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
+pred <- select(p, .id, starts_with("y_pred")) %>% rename(response = `.id`)
+est <- select(p, .id, starts_with("beta")) %>% rename(response = `.id`)
+names(est)[2:5] <- names(as.data.frame(X))
+est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
   LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`)
-p <- select(p, -alpha, -sigma, -`lp__`) %>% # cleaning up 
-  rename(Response = `.id`)
-p <- reshape2::melt(p) # make a long format for ggplot
+est <- reshape2::melt(est) # make a long format for ggplot
 ```
 
-```{r coefficient-plot, fig.width=6.5, fig.height=6.5}
-labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3)
-ggplot(p, aes(variable, value, fill = Response, colour = Response)) + 
+```{r coefficient-plot, fig.width=6, fig.height=6.5}
+labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5)
+ggplot(est, aes(variable, value, fill = response, colour = response)) + 
   geom_hline(yintercept = 0, lty = 2) + xlab("") +
-  scale_y_continuous(breaks = log(labs), labels = labs) +
-  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5) +
+  scale_y_continuous(breaks = log(labs), labels = labs, limits = range(log(labs))) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5,
+    draw_quantiles = 0.5) +
   coord_flip() +
   viridis::scale_fill_viridis(discrete = TRUE) +
   viridis::scale_color_viridis(discrete = TRUE) +
   theme_light() +
   ylab("Coefficient estimate")
-ggsave("figs/tmm-estimates.pdf", width = 6.5, height = 6.5)
+ggsave("figs/tnm-estimates.pdf", width = 6, height = 6.5)
 ```
 
 In the above plot, I labeled the x axis with the exponentiated versions of the coefficients. These are the multiplicative effects. So, for example, a value of 0.6 means that the response will be 60% of what it was if the predictor increases by 2 standard deviations (or in the case of the treatment, the lionfish are removed).
@@ -188,17 +183,85 @@ In the above plot, I labeled the x axis with the exponentiated versions of the c
 We can calculate the probability a given coefficient is above or less than 0 (i.e. the multiplicative effect is above or below 1) (because this is a Bayesian model). You can use these values when you report results. We can also calculate lots of other things depending on what would be meaningful (e.g. credible intervals on the effects).
 
 ```{r}
-sum_table <- p %>% group_by(variable, Response) %>% 
+sum_table <- est %>% group_by(variable, response) %>% 
   summarize(
     prob_less_0 = round(sum(value < 0)/n(), 2),
     prob_above_0 = round(sum(value > 0)/n(), 2))
 knitr::kable(sum_table)
 ```
 
-Here's what I see:
+Here's what I see:  *(numbers might have changed slightly)*
 
 - None of these effects are overly strong 
 - There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
-- There is a fairly high probability (ranging from 0.6 to 0.95) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`). This is for an average site, or in other words across all sites including those with and without removals. 
+- There is a fairly high probability (ranging from 0.6 to 0.93) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`). This is for an average site, or in other words across all sites including those with and without removals. 
 - The effect of lionfish density looks a bit stronger (negative) in the case of no removals `LFTADen_no_removal`, BUT the interaction between lionfish density and treatment is very weak (or at least very uncertain) (see `LFTADen:RemovTreat`).
 - There is weak evidence for an effect of the habitat variable on the responses with the exception of positive relationship between the habitat variables and `dNr` and `MMND`, with ~0.98 or 0.99 probability for the latter. (`HASAve`)
+
+# Residuals
+
+```{r residuals, warning=FALSE}
+p <- reshape2::melt(pred, variable.name = "site_i", value.name = "predicted")
+p <- p %>% group_by(response, site_i) %>%
+  summarise(predicted = mean(predicted))
+
+obs <- select(d_sum, Site:SDNND, lat, lon) %>%
+  reshape2::melt(id.vars = c("Site", "lat", "lon"), variable.name = "response", 
+    value.name = "observed")
+
+stopifnot(identical(nrow(d_sum), length(unique(p$site_i)))) # just to check
+lookup <- data_frame(Site = d_sum$Site, site_i = paste0("y_pred_", seq_len(nrow(d_sum))))
+res <- inner_join(p, lookup) %>% inner_join(obs) %>%
+  mutate(residual = observed - predicted)
+
+ggplot(res, aes(predicted, observed)) + geom_point() +
+  facet_wrap(~response, scales = "free") +
+  geom_abline(intercept = 0, slope = 1, lty = 2)
+
+ggplot(res, aes(predicted, residual)) + geom_point() +
+  facet_wrap(~response, scales = "free_x") +
+  geom_abline(intercept = 0, slope = 0, lty = 2)
+ggsave("figs/fitted-vs-obs-tnm-residuals.pdf", width = 9, height = 6.5)
+
+ggplot(res, aes(lon, lat, colour = residual)) + geom_point(size = 4) +
+  facet_wrap(~response) +
+  scale_color_gradient2()
+ggsave("figs/spatial-tnm-residuals.pdf", width = 10, height = 6.5)
+```
+
+Looks pretty good.
+
+# Check mixing
+
+```{r}
+color_scheme_set("mix-blue-red")
+lapply(out_cent, function(x) mcmc_trace(extract(x, inc_warmup = FALSE, permuted = FALSE, 
+  pars = c("y_pred"), include = FALSE)))
+
+lapply(out_cent, function(x) {
+  broom::tidyMCMC(x, rhat = TRUE, ess = TRUE) %>% 
+    filter(!grepl("y", term)) %>%
+    select(term, rhat, ess) %>%
+    mutate(rhat = round(rhat, 2), ess = round(ess, 2))
+})
+```
+
+Looks great.
+
+# brms package checks
+
+Similar, but subtly different models as checks (ignore).
+
+```{r}
+# library(brms)
+# m2 <- brm(dNr ~ 1 + HASAve + LFTADen * RemovTreat, data = d_sum)
+
+# m3 <- brm(dNr | se(dNr_sd) ~ 1 + HASAve + LFTADen * RemovTreat, data = d_sum,
+#   prior = c(prior(student_t(5, 0, 2), class = "b"), prior(student_t(5, 0, 5), class = "Intercept")))
+
+# m4 <- brm(dNr | se(dNr_sd) ~ 1 + HASAve + LFTADen * RemovTreat + (1|Site), data = d_sum,
+#   control = list(adapt_delta = 0.99),
+#   prior = c(prior(student_t(5, 0, 2), class = "b"),
+#     prior(student_t(5, 0, 5), class = "Intercept"),
+#     prior(student_t(5, 0, 2), class = "sd")))
+```

@@ -18,9 +18,15 @@ transformed parameters {
   }
 } 
 model { 
-  sigma ~ student_t(5, 0, 2);  // prior
-  alpha ~ student_t(5, 0, 5);  // prior
-  beta ~ student_t(5, 0, 2);   // prior
+  sigma ~ student_t(3, 0, 1);  // prior
+  alpha ~ student_t(3, 0, 10);  // prior
+  beta ~ student_t(3, 0, 1);   // prior
   y_meas ~ normal(y, tau);     // measurement model
   y_raw ~ normal(0, 1);        // non-centered parameterization 'trick'
+}
+generated quantities{
+  real y_pred[N];
+  for (i in 1:N) {
+    y_pred[i] = alpha + X[i, ] * beta;
+  }
 }
