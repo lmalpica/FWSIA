@@ -169,7 +169,7 @@ ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
 </div>
 <div id="quick-model" class="section level1">
 <h1>Quick model</h1>
-<p>Let’s get a quick linear model ignoring the uncertainty:</p>
+<p>Let’s fit a quick linear model ignoring the uncertainty:</p>
 <pre class="r"><code>m1 &lt;- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
 arm::display(m1)
 #&gt; lm(formula = dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)

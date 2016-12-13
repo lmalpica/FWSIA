@@ -1,7 +1,9 @@
 ---
 title: "TNM Stan models"
 date: "`r Sys.Date()`"
-output: rmarkdown::html_document
+output: 
+  html_document:
+    keep_md: true
 ---
 
 ```{r, echo = FALSE}
@@ -82,7 +84,7 @@ ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
 
 # Quick model
 
-Let's get a quick linear model ignoring the uncertainty:
+Let's fit a quick linear model ignoring the uncertainty:
 
 ```{r}
 m1 <- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
