@@ -5,3 +5,4 @@
 *.rda
 *.html
 *cache*
+tnm_files/*

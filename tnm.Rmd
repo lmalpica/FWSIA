@@ -1,7 +1,7 @@
 ---
 title: "TNM Stan models"
 date: "`r Sys.Date()`"
-output: rmarkdown::github_document
+output: rmarkdown::html_document
 ---
 
 ```{r, echo = FALSE}
@@ -13,7 +13,8 @@ knitr::opts_chunk$set(
   autodep = TRUE,
   warning = FALSE,
   cache.lazy = TRUE,
-  cache.comments = TRUE
+  cache.comments = TRUE,
+  fig.retina = 1
   )
 ```
 
@@ -41,14 +42,16 @@ HASAve (averaged score of habitat complexity), and lionfish removal treatment
 d <- read.csv("data/FullCommNoLF.csv")
 ```
 
-# Quick model
+# Summarizing the response data 
+
+We can summarize the response data assuming it is log normally distributed:
 
 ```{r}
 d_logged <- group_by(d, Site) %>%
-  mutate_each(funs(log), dNr:SDNND)
+  mutate_at(vars(dNr:SDNND), log)
 
 d_means <- d_logged %>%
-  summarise_each(funs(mean))
+  summarize_all(mean)
 
 d_sds <- d_logged %>%
   summarise_each(funs(sd), dNr:SDNND) %>%
@@ -62,9 +65,26 @@ d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve),
   RemovTreat = arm::rescale(RemovTreat))
 
 d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
+```
 
-# reshape2::melt(d, )
+The following plot shows the log transformed response data with our mean of the log transformed response data overlaid with a red line. For the most part these look approximately normally distributed and so our summary makes sense. The one variable that is a little bit off is SDNND. Still, I imagine this is close enough. If we wanted to get fancy, we could summarize these with something more flexible like a Gamma distribution.
 
+```{r, fig.width=12, fig.height=10}
+d_sum_melt_mean <- select(d_sum, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
+d_sum_melt_sd <- select(d_sum, Site, dNr_sd:SDNND_sd) %>% reshape2::melt(id.vars = "Site")
+d_melt <- select(d, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
+  
+ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
+  facet_grid(Site~variable, scales = "free") +
+  geom_vline(data = d_sum_melt_mean, aes(xintercept = value), colour = "red")
+```
+
+
+# Quick model
+
+Let's get a quick linear model ignoring the uncertainty:
+
+```{r}
 m1 <- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
 arm::display(m1)
 ```
@@ -94,7 +114,19 @@ That looks the same to me.
 
 # Measurement error model
 
-Now let's use the following model that allows for measurement error on y:
+Now let's use the following model that allows for measurement error on y.
+
+We can write the model as follows:
+
+$$
+y_i \sim \mathrm{Normal} \left(y^\mathrm{true}_i, \tau_i^2\right),\\
+y_i^\mathrm{true} = \beta_0 + \beta_1 H_i + \beta_2 L_i + \beta_3 R_i + + \beta_4 R_i L_i + \epsilon_{i},\\
+\epsilon_i \sim \mathrm{Normal}(0, \sigma^2),
+$$
+
+where $y_i$ and $\tau_i$ represent the mean and standard deviation of the log-transformed posterior of one of our response variables for site $i$, $y^\mathrm{true}_i$ represents the true unobserved value of that response variable, the $\beta$'s represent estimated coefficients, and $H_i$, $L_i$, and $R_i$ represent the habitat index variable, the lionfish density, and a binary variable representing whether lionfish were removed, respectively. The variable $\epsilon_i$ represents normally distributed residual error with mean 0 and standard deviation $\sigma$. 
+
+"True" may not be the correct term to use here. It's not that it is necessarily "true", but it is the response variable without the measurement uncertainty around it.
 
 ```{r}
 writeLines(readLines("tnm-meas.stan"))
@@ -247,6 +279,23 @@ lapply(out_cent, function(x) {
 ```
 
 Looks great.
+
+# Credible intervals 
+
+```{r}
+intervals <- group_by(est, response, variable) %>%
+  summarize(
+    q0.025 = quantile(value, probs = 0.025),
+    q0.25 = quantile(value, probs = 0.25),
+    q0.5 = quantile(value, probs = 0.5),
+    q0.75 = quantile(value, probs = 0.75),
+    q0.975 = quantile(value, probs = 0.975))
+
+intervals_rounded <- intervals %>% 
+  mutate_at(vars(q0.025:q0.975), round, digits = 2)
+
+knitr::kable(intervals_rounded)
+```
 
 # brms package checks
 
