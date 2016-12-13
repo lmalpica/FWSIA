@@ -3,7 +3,7 @@ title: "TNM Stan models"
 date: "`r Sys.Date()`"
 output: 
   html_document:
-    keep_md: true
+    keep_md: false
 ---
 
 ```{r, echo = FALSE}
