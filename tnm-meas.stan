@@ -4,6 +4,8 @@ data {
   real y_meas[N];      // measurement of y
   real<lower=0> tau[N];   // measurement sd on y
   matrix[N, K] X;      // model predictor matrix
+  int N_new;               // number (new) of observations
+  matrix[N_new, K] X_new;      // (new) model predictor matrix
 }
 parameters {
   vector[K] beta;      // vector of predictors
@@ -26,7 +28,11 @@ model {
 }
 generated quantities{
   real y_pred[N];
+  real y_pred_new[N_new];
   for (i in 1:N) {
     y_pred[i] = alpha + X[i, ] * beta;
+  }
+  for (i in 1:N_new) {
+    y_pred_new[i] = alpha + X_new[i, ] * beta;
   }
 }

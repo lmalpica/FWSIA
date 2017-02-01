@@ -6,3 +6,7 @@
 *.html
 *cache*
 tnm_files/*
+
+tnm-meas.rds
+
+tnm.rds

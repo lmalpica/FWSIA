@@ -1,9 +1,6 @@
 ---
 title: "TNM Stan models"
 date: "`r Sys.Date()`"
-output: 
-  html_document:
-    keep_md: false
 ---
 
 ```{r, echo = FALSE}
@@ -17,7 +14,7 @@ knitr::opts_chunk$set(
   cache.lazy = TRUE,
   cache.comments = TRUE,
   fig.retina = 1
-  )
+)
 ```
 
 ```{r, message=FALSE}
@@ -30,6 +27,27 @@ ctl <- list(adapt_delta = 0.99) # more robust than the default
 library(bayesplot)
 # devtools::install_github("seananderson/stanhelpers") # if needed
 library(stanhelpers)
+```
+
+A custom theme for ggplot:
+
+```{r}
+theme_gg <- function(base_size = 11, base_family = "") {
+  theme_light() +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      strip.background = element_rect(fill = NA, colour = NA),
+      strip.text.x = element_text(colour = "grey10"),
+      axis.text = element_text(colour = "grey30"),
+      axis.title = element_text(colour = "grey30"),
+      legend.title = element_text(colour = "grey30", size = rel(0.9)),
+      panel.border = element_rect(fill = NA, colour = "grey70", size = 1),
+      legend.key.size = unit(0.8, "lines"),
+      legend.text = element_text(size = rel(0.7), colour = "grey30"),
+      legend.key = element_rect(colour = NA)
+    )
+}
 ```
 
 # Data
@@ -62,8 +80,10 @@ names(d_sds) <- paste0(names(d_sds), "_sd")
 
 d_sum <- data.frame(d_means, d_sds)
 
+d_raw <- d_sum # save
+
 d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve), 
-  LFTADen = arm::rescale(LFTADen),
+  LFTADen = arm::rescale(log(LFTADen)), # NOTE LOG!!
   RemovTreat = arm::rescale(RemovTreat))
 
 d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
@@ -75,12 +95,11 @@ The following plot shows the log transformed response data with our mean of the 
 d_sum_melt_mean <- select(d_sum, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
 d_sum_melt_sd <- select(d_sum, Site, dNr_sd:SDNND_sd) %>% reshape2::melt(id.vars = "Site")
 d_melt <- select(d, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
-  
+
 ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
   facet_grid(Site~variable, scales = "free") +
   geom_vline(data = d_sum_melt_mean, aes(xintercept = value), colour = "red")
 ```
-
 
 # Quick model
 
@@ -97,7 +116,8 @@ Same model to check:
 
 ```{r}
 X <- model.matrix(dNr ~ 0 + HASAve + LFTADen * RemovTreat, data = d_sum)
-stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X)
+stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X,
+  N_new = nrow(d_sum), X_new = X)
 ```
 
 ```{r}
@@ -146,7 +166,7 @@ m_meas
 We can inspect and plot the output:
 
 ```{r stan-check-plots}
-posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE, pars = "y_pred", 
+posterior <- extract(m_meas, inc_warmup = FALSE, permuted = FALSE, pars = c("y_pred", "y_pred_new"), 
   include = FALSE)
 mcmc_trace(posterior)
 names(as.data.frame(X))
@@ -164,11 +184,18 @@ Now that the above models are working, let's apply them to the various responses
 The following function will format the data and fit the model for a given response. It also has the option of centering or not centering the removal variable. 
 
 ```{r}
+newdata <- expand.grid(HASAve = 0, 
+  LFTADen = seq(min(d_sum$LFTADen), 
+    max(d_sum$LFTADen), length.out = 200),
+  RemovTreat = c(0.5, -0.5),
+  y = 0) # ignore y
+X_new <- model.matrix(y ~ 0 + HASAve + LFTADen * RemovTreat, data = newdata)
+
 fit_tnm <- function(response) {
   f <- paste(response, "~ 0 + HASAve + LFTADen * RemovTreat")
   X <- model.matrix(as.formula(f), data = d_sum)
   stan_dat <- list(y_meas = d_sum[, response], tau = d_sum$dNr_sd, N = nrow(d_sum), 
-    K = ncol(X), X = X)
+    K = ncol(X), X = X, N_new = nrow(X_new), X_new = X_new)
   m <- stan("tnm-meas.stan", data = stan_dat,
     pars = c("y", "y_raw"), include = FALSE, control = list(adapt_delta = 0.99), 
     iter = 3000, chains = 4)
@@ -189,7 +216,7 @@ Here we will extract the posteriors from the models and reformat the output for 
 ```{r}
 stopifnot(identical(mean(d$RemovTreat), 0.5)) # Just in case! 
 p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
-pred <- select(p, .id, starts_with("y_pred")) %>% rename(response = `.id`)
+pred <- select(p, .id, starts_with("y_pred"), -contains("new")) %>% rename(response = `.id`)
 est <- select(p, .id, starts_with("beta")) %>% rename(response = `.id`)
 names(est)[2:5] <- names(as.data.frame(X))
 est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
@@ -207,7 +234,7 @@ ggplot(est, aes(variable, value, fill = response, colour = response)) +
   coord_flip() +
   viridis::scale_fill_viridis(discrete = TRUE) +
   viridis::scale_color_viridis(discrete = TRUE) +
-  theme_light() +
+  theme_gg() +
   ylab("Coefficient estimate")
 ggsave("figs/tnm-estimates.pdf", width = 6, height = 6.5)
 ```
@@ -224,7 +251,7 @@ sum_table <- est %>% group_by(variable, response) %>%
 knitr::kable(sum_table)
 ```
 
-Here's what I see:  *(numbers might have changed slightly)*
+Here's what I see:  *(numbers might have changed slightly)*  *TODO NUMBERS DIFFERENT, NOW LOGGED*
 
 - None of these effects are overly strong 
 - There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
@@ -315,4 +342,45 @@ Similar, but subtly different models as checks (ignore).
 #   prior = c(prior(student_t(5, 0, 2), class = "b"),
 #     prior(student_t(5, 0, 5), class = "Intercept"),
 #     prior(student_t(5, 0, 2), class = "sd")))
+```
+
+# Predictions
+
+```{r}
+pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
+pp <- plyr::ldply(pp, function(x) {
+  data.frame(X_new, 
+    l = apply(x, 2, quantile, probs = 0.1),
+    u = apply(x, 2, quantile, probs = 0.9),
+    med = apply(x, 2, median))
+})
+pp$LFTADen_raw <- exp(pp$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
+
+d_sum_long <- d_sum %>% select(-ends_with("sd"), -LFRnAve) %>% 
+  tidyr::gather(.id, value, -lat, -lon, -Site, -LFTADen, -HASAve, -RemovTreat)
+d_sum_long$LFTADen_raw <- exp(d_sum_long$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+d_sum_long <- mutate(d_sum_long, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
+
+b1s <- plyr::ldply(out_cent, function(x) {
+  data.frame(b1 = median(extract(x)$beta[,1]))
+})
+
+d_sum_long <- left_join(d_sum_long, b1s)
+d_sum_long <- mutate(d_sum_long, value_adjusted = value - b1 * HASAve)
+
+cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Reds")[[3]])
+g <- ggplot(pp, aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
+  facet_wrap(~.id, scales = "free_y") +
+  geom_line(lwd = 1) +
+  geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
+    alpha = 0.15, lwd = 0) +
+  labs(y = "Response value", x = "Lionfish density") +
+  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
+  theme_gg() +
+  geom_point(data = d_sum_long, aes(x = LFTADen_raw,
+    y = exp(value_adjusted), colour = `Lionfish removed`), inherit.aes = FALSE)
+# scale_x_log10(breaks = c(1, 2, 4, 6))
+g
+ggsave("figs/prediction-examples.pdf", width = 9.5, height = 5)
 ```
