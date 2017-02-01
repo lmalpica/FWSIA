@@ -1,0 +1,49 @@
+#following plotting example from:
+#https://groups.google.com/forum/#!categories/stan-users/general
+
+
+```{r}
+#Modified code
+#Draw posteriors from model output
+M = summary(m_meas)$summary
+n=16
+yhat_bayes = ylow_bayes = yup_bayes = 0
+for(i in 1:n)
+{
+  yhat_bayes[i] = M[paste0("y_pred[",i,"]"),"mean"]
+  ylow_bayes[i] = M[paste0("y_pred[",i,"]"),"2.5%"]
+  yup_bayes[i] = M[paste0("y_pred[",i,"]"),"97.5%"]
+}
+```
+
+```{r}
+#plot results	
+plot(1, type="n", xlab="", ylab="", xlim=c(-1, 1), ylim=c(0.6, 2))
+points(d_sum$HASAve,d_sum$dNr,pch=16)
+lines((d_sum$HASAve),yhat_bayes,lwd=3,col="#5B9BD5")
+lines((d_sum$HASAve),ylow_bayes,lwd=2,col="#ED7D31")
+lines((d_sum$HASAve),yup_bayes,lwd=2,col="#ED7D31")
+```
+
+#that looks very bad, I thought maybe a sorting problem, so I did this but to no avail
+
+```{r}
+plot(1, type="n", xlab="", ylab="", xlim=c(-1, 1), ylim=c(0.6, 2))
+points(d_sum$HASAve,d_sum$dNr,pch=16)
+
+medx <- sort(d_sum$HASAve)
+medy <- sort(yhat_bayes)
+med <- cbind(medx, medy)
+lines((med[,1]),(med[,2]),lwd=3,col="#5B9BD5")
+
+medupx <- sort(d_sum$HASAve)
+medupy <- sort(yup_bayes)
+medup <- cbind(medupx, medupy)
+lines((medup[,1]),medup[,2],lwd=2,col="#ED7D31")
+
+medlowx <- sort(d_sum$HASAve)
+medlowy <- sort(ylow_bayes)
+medlow <- cbind(medlowx, medlowy)
+lines((medlow[,1]),medlow[,2],lwd=2,col="#ED7D31")
+```
+
