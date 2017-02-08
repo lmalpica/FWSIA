@@ -10,3 +10,9 @@ tnm_files/*
 tnm-meas.rds
 
 tnm.rds
+
+*.html
+
+*.pdf
+
+*.pdf
