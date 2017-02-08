@@ -115,7 +115,7 @@ arm::display(m1)
 Same model to check:
 
 ```{r}
-X <- model.matrix(dNr ~ 0 + HASAve + LFTADen * RemovTreat, data = d_sum)
+X <- model.matrix(dNr ~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat, data = d_sum)
 stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X,
   N_new = nrow(d_sum), X_new = X)
 ```
@@ -146,7 +146,7 @@ y_i^\mathrm{true} = \beta_0 + \beta_1 H_i + \beta_2 L_i + \beta_3 R_i + + \beta_
 \epsilon_i \sim \mathrm{Normal}(0, \sigma^2),
 $$
 
-where $y_i$ and $\tau_i$ represent the mean and standard deviation of the log-transformed posterior of one of our response variables for site $i$, $y^\mathrm{true}_i$ represents the true unobserved value of that response variable, the $\beta$'s represent estimated coefficients, and $H_i$, $L_i$, and $R_i$ represent the habitat index variable, the lionfish density, and a binary variable representing whether lionfish were removed, respectively. The variable $\epsilon_i$ represents normally distributed residual error with mean 0 and standard deviation $\sigma$. 
+where $y_i$ and $\tau_i$ represent the mean and standard deviation of the log-transformed posterior of one of our response variables for site $i$, $y^\mathrm{true}_i$ represents the true unobserved value of that response variable, the $\beta$'s represent estimated coefficients, and $H_i$, $L_i$, and $R_i$ represent the habitat index variable, the lionfish density, and a binary variable representing whether lionfish were removed, respectively. The variable $\epsilon_i$ represents normally distributed residual error with mean 0 and standard deviation $\sigma$.
 
 "True" may not be the correct term to use here. It's not that it is necessarily "true", but it is the response variable without the measurement uncertainty around it.
 
@@ -189,10 +189,10 @@ newdata <- expand.grid(HASAve = 0,
     max(d_sum$LFTADen), length.out = 200),
   RemovTreat = c(0.5, -0.5),
   y = 0) # ignore y
-X_new <- model.matrix(y ~ 0 + HASAve + LFTADen * RemovTreat, data = newdata)
+X_new <- model.matrix(y ~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat, data = newdata)
 
 fit_tnm <- function(response) {
-  f <- paste(response, "~ 0 + HASAve + LFTADen * RemovTreat")
+  f <- paste(response, "~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat")
   X <- model.matrix(as.formula(f), data = d_sum)
   stan_dat <- list(y_meas = d_sum[, response], tau = d_sum$dNr_sd, N = nrow(d_sum), 
     K = ncol(X), X = X, N_new = nrow(X_new), X_new = X_new)
@@ -297,7 +297,7 @@ Looks pretty good.
 ```{r}
 color_scheme_set("mix-blue-red")
 lapply(out_cent, function(x) mcmc_trace(extract(x, inc_warmup = FALSE, permuted = FALSE, 
-  pars = c("y_pred"), include = FALSE)))
+  pars = c("y_pred", "y_pred_new"), include = FALSE)))
 
 lapply(out_cent, function(x) {
   broom::tidyMCMC(x, rhat = TRUE, ess = TRUE) %>% 
@@ -350,8 +350,8 @@ Similar, but subtly different models as checks (ignore).
 pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
 pp <- plyr::ldply(pp, function(x) {
   data.frame(X_new, 
-    l = apply(x, 2, quantile, probs = 0.1),
-    u = apply(x, 2, quantile, probs = 0.9),
+    l = apply(x, 2, quantile, probs = 0.05),
+    u = apply(x, 2, quantile, probs = 0.95),
     med = apply(x, 2, median))
 })
 pp$LFTADen_raw <- exp(pp$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
