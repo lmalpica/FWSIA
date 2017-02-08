@@ -20,9 +20,9 @@ transformed parameters {
   }
 } 
 model { 
-  sigma ~ student_t(3, 0, 1);  // prior
-  alpha ~ student_t(3, 0, 10);  // prior
-  beta ~ student_t(3, 0, 1);   // prior
+  sigma ~ student_t(3, 0, 2);  // prior
+  alpha ~ normal(0, 10);  // prior
+  beta ~ normal(0, 2);   // prior
   y_meas ~ normal(y, tau);     // measurement model
   y_raw ~ normal(0, 1);        // non-centered parameterization 'trick'
 }
