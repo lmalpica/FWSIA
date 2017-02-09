@@ -60,6 +60,7 @@ HASAve (averaged score of habitat complexity), and lionfish removal treatment
 
 ```{r}
 d <- read.csv("data/FullCommNoLF.csv")
+d <- select(d, -dCr, -CD)
 ```
 
 # Summarizing the response data 
@@ -106,7 +107,7 @@ ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
 Let's fit a quick linear model ignoring the uncertainty:
 
 ```{r}
-m1 <- lm(dNr ~ HASAve + LFTADen * RemovTreat, data = d_sum)
+m1 <- lm(dNr ~ (HASAve + LFTADen) * RemovTreat, data = d_sum)
 arm::display(m1)
 ```
 
@@ -115,7 +116,7 @@ arm::display(m1)
 Same model to check:
 
 ```{r}
-X <- model.matrix(dNr ~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat, data = d_sum)
+X <- model.matrix(dNr ~ 0 + (HASAve + LFTADen) * RemovTreat, data = d_sum)
 stan_dat <- list(y_meas = d_sum$dNr, tau = d_sum$dNr_sd, N = nrow(d_sum), K = ncol(X), X = X,
   N_new = nrow(d_sum), X_new = X)
 ```
@@ -189,10 +190,10 @@ newdata <- expand.grid(HASAve = 0,
     max(d_sum$LFTADen), length.out = 200),
   RemovTreat = c(0.5, -0.5),
   y = 0) # ignore y
-X_new <- model.matrix(y ~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat, data = newdata)
+X_new <- model.matrix(y ~ 0 + (HASAve + LFTADen) * RemovTreat, data = newdata)
 
 fit_tnm <- function(response) {
-  f <- paste(response, "~ 0 + HASAve * RemovTreat + LFTADen * RemovTreat")
+  f <- paste(response, "~ 0 + (HASAve + LFTADen) * RemovTreat")
   X <- model.matrix(as.formula(f), data = d_sum)
   stan_dat <- list(y_meas = d_sum[, response], tau = d_sum$dNr_sd, N = nrow(d_sum), 
     K = ncol(X), X = X, N_new = nrow(X_new), X_new = X_new)
@@ -206,7 +207,7 @@ fit_tnm <- function(response) {
 Now let's apply the function to each of the responses. 
 
 ```{r, results='hide'}
-responses <- names(d)[2:7]
+responses <- names(d)[2:5]
 out_cent <- lapply(responses, fit_tnm)
 names(out_cent) <- responses
 ```
@@ -218,9 +219,11 @@ stopifnot(identical(mean(d$RemovTreat), 0.5)) # Just in case!
 p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
 pred <- select(p, .id, starts_with("y_pred"), -contains("new")) %>% rename(response = `.id`)
 est <- select(p, .id, starts_with("beta")) %>% rename(response = `.id`)
-names(est)[2:5] <- names(as.data.frame(X))
+names(est)[2:6] <- names(as.data.frame(X))
 est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
-  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`)
+  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`,
+  HASAve_w_removal = HASAve + 0.5 * `HASAve:RemovTreat`,
+  HASAve_no_removal = HASAve - 0.5 * `HASAve:RemovTreat`)
 est <- reshape2::melt(est) # make a long format for ggplot
 ```
 
