@@ -185,11 +185,17 @@ Now that the above models are working, let's apply them to the various responses
 The following function will format the data and fit the model for a given response. It also has the option of centering or not centering the removal variable. 
 
 ```{r}
-newdata <- expand.grid(HASAve = 0, 
+newdata_den <- expand.grid(HASAve = 0, 
   LFTADen = seq(min(d_sum$LFTADen), 
-    max(d_sum$LFTADen), length.out = 200),
+    max(d_sum$LFTADen), length.out = 150),
   RemovTreat = c(0.5, -0.5),
   y = 0) # ignore y
+newdata_hab <- expand.grid(
+  HASAve = seq(min(d_sum$HASAve), max(d_sum$HASAve), length.out = 150), 
+  LFTADen = 0,
+  RemovTreat = c(0.5, -0.5),
+  y = 0) # ignore y
+newdata <- bind_rows(newdata_den, newdata_hab)
 X_new <- model.matrix(y ~ 0 + (HASAve + LFTADen) * RemovTreat, data = newdata)
 
 fit_tnm <- function(response) {
@@ -228,17 +234,28 @@ est <- reshape2::melt(est) # make a long format for ggplot
 ```
 
 ```{r coefficient-plot, fig.width=6, fig.height=6.5}
+cis <- est %>% 
+  group_by(response, variable) %>% 
+  summarise(l = quantile(value, 0.05),
+    m = quantile(value, 0.5),
+    u = quantile(value, 0.95)) %>% 
+  ungroup()
+
 labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5)
 ggplot(est, aes(variable, value, fill = response, colour = response)) + 
   geom_hline(yintercept = 0, lty = 2) + xlab("") +
   scale_y_continuous(breaks = log(labs), labels = labs, limits = range(log(labs))) +
-  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5,
-    draw_quantiles = 0.5) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5) +
   coord_flip() +
   viridis::scale_fill_viridis(discrete = TRUE) +
   viridis::scale_color_viridis(discrete = TRUE) +
   theme_gg() +
-  ylab("Coefficient estimate")
+  ylab("Coefficient estimate") +
+  geom_point(data = cis, aes(x = variable, y = m), col = "grey20", cex = 0.9,
+    position = position_dodge(width = 0.8)) +
+  geom_linerange(data = cis, aes(x = variable, ymin = l, ymax = u, group = response),
+    lwd = 0.4, col = "grey20", position = position_dodge(width = 0.8), inherit.aes = FALSE) +
+  guides(colour = guide_legend(reverse=TRUE), fill = guide_legend(reverse=TRUE))
 ggsave("figs/tnm-estimates.pdf", width = 6, height = 6.5)
 ```
 
@@ -353,27 +370,32 @@ Similar, but subtly different models as checks (ignore).
 pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
 pp <- plyr::ldply(pp, function(x) {
   data.frame(X_new, 
-    l = apply(x, 2, quantile, probs = 0.05),
-    u = apply(x, 2, quantile, probs = 0.95),
+    l = apply(x, 2, quantile, probs = 0.1),
+    u = apply(x, 2, quantile, probs = 0.9),
     med = apply(x, 2, median))
 })
 pp$LFTADen_raw <- exp(pp$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+pp$HASAve_raw <- pp$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
 pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
 
 d_sum_long <- d_sum %>% select(-ends_with("sd"), -LFRnAve) %>% 
   tidyr::gather(.id, value, -lat, -lon, -Site, -LFTADen, -HASAve, -RemovTreat)
 d_sum_long$LFTADen_raw <- exp(d_sum_long$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+d_sum_long$HASAve_raw <- d_sum_long$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
 d_sum_long <- mutate(d_sum_long, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
 
-b1s <- plyr::ldply(out_cent, function(x) {
-  data.frame(b1 = median(extract(x)$beta[,1]))
+b_s <- plyr::ldply(out_cent, function(x) {
+  data.frame(b1 = median(extract(x)$beta[,which(colnames(X) == "HASAve")]),
+    b2 = median(extract(x)$beta[,which(colnames(X) == "LFTADen")]))
 })
 
-d_sum_long <- left_join(d_sum_long, b1s)
-d_sum_long <- mutate(d_sum_long, value_adjusted = value - b1 * HASAve)
+d_sum_long <- left_join(d_sum_long, b_s)
+d_sum_long <- mutate(d_sum_long, value_at_mean_HASAve = value - b1 * HASAve)
+d_sum_long <- mutate(d_sum_long, value_at_mean_LFTADen = value - b2 * LFTADen)
 
-cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Reds")[[3]])
-g <- ggplot(pp, aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
+cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
+g <- filter(pp, HASAve == 0) %>% 
+  ggplot(aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
   facet_wrap(~.id, scales = "free_y") +
   geom_line(lwd = 1) +
   geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
@@ -382,8 +404,21 @@ g <- ggplot(pp, aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
   theme_gg() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
-    y = exp(value_adjusted), colour = `Lionfish removed`), inherit.aes = FALSE)
-# scale_x_log10(breaks = c(1, 2, 4, 6))
+    y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
-ggsave("figs/prediction-examples.pdf", width = 9.5, height = 5)
+ggsave("figs/predictions-den.pdf", width = 9.5, height = 5)
+
+g <- filter(pp, LFTADen == 0) %>% 
+  ggplot(aes(HASAve_raw, exp(med), colour = `Lionfish removed`)) + 
+  facet_wrap(~.id, scales = "free_y") +
+  geom_line(lwd = 1) +
+  geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
+    alpha = 0.15, lwd = 0) +
+  labs(y = "Response value", x = "HASAve") +
+  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
+  theme_gg() +
+  geom_point(data = d_sum_long, aes(x = HASAve_raw,
+    y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
+g
+ggsave("figs/predictions-hab.pdf", width = 9.5, height = 5)
 ```
