@@ -233,6 +233,13 @@ est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
 est <- reshape2::melt(est) # make a long format for ggplot
 ```
 
+```{r}
+#change var and response names
+levels(est$variable) <- list("Habitat with no removal"="HASAve_no_removal","Habitat with removal"="HASAve_w_removal", "Lionfish with no removal"="LFTADen_no_removal", "Lionfish with removal"="LFTADen_w_removal","Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
+est$response <- as.factor(est$response)
+levels(est$response) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
+```
+
 ```{r coefficient-plot, fig.width=6, fig.height=6.5}
 cis <- est %>% 
   group_by(response, variable) %>% 
@@ -378,6 +385,9 @@ pp$LFTADen_raw <- exp(pp$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$L
 pp$HASAve_raw <- pp$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
 pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
 
+pp$.id <- as.factor(pp$.id)
+levels(pp$.id) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
+
 d_sum_long <- d_sum %>% select(-ends_with("sd"), -LFRnAve) %>% 
   tidyr::gather(.id, value, -lat, -lon, -Site, -LFTADen, -HASAve, -RemovTreat)
 d_sum_long$LFTADen_raw <- exp(d_sum_long$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
@@ -392,6 +402,9 @@ b_s <- plyr::ldply(out_cent, function(x) {
 d_sum_long <- left_join(d_sum_long, b_s)
 d_sum_long <- mutate(d_sum_long, value_at_mean_HASAve = value - b1 * HASAve)
 d_sum_long <- mutate(d_sum_long, value_at_mean_LFTADen = value - b2 * LFTADen)
+
+d_sum_long$.id <- as.factor(d_sum_long$.id)
+levels(d_sum_long$.id) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
 
 cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
 g <- filter(pp, HASAve == 0) %>% 
