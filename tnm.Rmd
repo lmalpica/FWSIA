@@ -27,27 +27,7 @@ ctl <- list(adapt_delta = 0.99) # more robust than the default
 library(bayesplot)
 # devtools::install_github("seananderson/stanhelpers") # if needed
 library(stanhelpers)
-```
-
-A custom theme for ggplot:
-
-```{r}
-theme_gg <- function(base_size = 11, base_family = "") {
-  theme_light() +
-    theme(
-      panel.grid.major = element_blank(),
-      panel.grid.minor = element_blank(),
-      strip.background = element_rect(fill = NA, colour = NA),
-      strip.text.x = element_text(colour = "grey10"),
-      axis.text = element_text(colour = "grey30"),
-      axis.title = element_text(colour = "grey30"),
-      legend.title = element_text(colour = "grey30", size = rel(0.9)),
-      panel.border = element_rect(fill = NA, colour = "grey70", size = 1),
-      legend.key.size = unit(0.8, "lines"),
-      legend.text = element_text(size = rel(0.7), colour = "grey30"),
-      legend.key = element_rect(colour = NA)
-    )
-}
+library(ggsidekick) # devtools::install_github("seananderson/ggsidekick")
 ```
 
 # Data
@@ -256,7 +236,7 @@ ggplot(est, aes(variable, value, fill = response, colour = response)) +
   coord_flip() +
   viridis::scale_fill_viridis(discrete = TRUE) +
   viridis::scale_color_viridis(discrete = TRUE) +
-  theme_gg() +
+  theme_sleek() +
   ylab("Coefficient estimate") +
   geom_point(data = cis, aes(x = variable, y = m), col = "grey20", cex = 0.9,
     position = position_dodge(width = 0.8)) +
@@ -415,7 +395,7 @@ g <- filter(pp, HASAve == 0) %>%
     alpha = 0.15, lwd = 0) +
   labs(y = "Response value", x = "Lionfish density") +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-  theme_gg() +
+  theme_sleek() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
     y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
@@ -429,7 +409,7 @@ g <- filter(pp, LFTADen == 0) %>%
     alpha = 0.15, lwd = 0) +
   labs(y = "Response value", x = "HASAve") +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-  theme_gg() +
+  theme_sleek() +
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
     y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
