@@ -248,6 +248,10 @@ cis <- est %>%
     u = quantile(value, 0.95)) %>% 
   ungroup()
 
+#arrange response variables for a more "logical" order in plots
+est$response = with(est, factor(response, levels = rev(levels(response))))
+cis$response = with(cis, factor(response, levels = rev(levels(response))))
+
 labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5)
 ggplot(est, aes(variable, value, fill = response, colour = response)) + 
   geom_hline(yintercept = 0, lty = 2) + xlab("") +
