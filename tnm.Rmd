@@ -40,7 +40,7 @@ HASAve (averaged score of habitat complexity), and lionfish removal treatment
 
 ```{r}
 d <- read.csv("data/FullCommNoLF.csv")
-d <- select(d, -dCr, -CD)
+d <- select(d, -MNND, -SDNND, -CD)
 ```
 
 # Summarizing the response data 
@@ -49,13 +49,13 @@ We can summarize the response data assuming it is log normally distributed:
 
 ```{r}
 d_logged <- group_by(d, Site) %>%
-  mutate_at(vars(dNr:SDNND), log)
+  mutate_at(vars(dNr:TA), log)
 
 d_means <- d_logged %>%
   summarize_all(mean)
 
 d_sds <- d_logged %>%
-  summarise_each(funs(sd), dNr:SDNND) %>%
+  summarise_each(funs(sd), dNr:TA) %>%
   dplyr::select(-Site)
 names(d_sds) <- paste0(names(d_sds), "_sd")
 
@@ -73,9 +73,9 @@ d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
 The following plot shows the log transformed response data with our mean of the log transformed response data overlaid with a red line. For the most part these look approximately normally distributed and so our summary makes sense. The one variable that is a little bit off is SDNND. Still, I imagine this is close enough. If we wanted to get fancy, we could summarize these with something more flexible like a Gamma distribution.
 
 ```{r, fig.width=12, fig.height=10}
-d_sum_melt_mean <- select(d_sum, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
-d_sum_melt_sd <- select(d_sum, Site, dNr_sd:SDNND_sd) %>% reshape2::melt(id.vars = "Site")
-d_melt <- select(d, Site:SDNND) %>% reshape2::melt(id.vars = "Site")
+d_sum_melt_mean <- select(d_sum, Site:TA) %>% reshape2::melt(id.vars = "Site")
+d_sum_melt_sd <- select(d_sum, Site, dNr_sd:TA_sd) %>% reshape2::melt(id.vars = "Site")
+d_melt <- select(d, Site:TA) %>% reshape2::melt(id.vars = "Site")
 
 ggplot(d_melt, aes(log(value))) + geom_histogram(bins = 40) +
   facet_grid(Site~variable, scales = "free") +
@@ -193,7 +193,7 @@ fit_tnm <- function(response) {
 Now let's apply the function to each of the responses. 
 
 ```{r, results='hide'}
-responses <- names(d)[2:5]
+responses <- names(d)[2:4]
 out_cent <- lapply(responses, fit_tnm)
 names(out_cent) <- responses
 ```
@@ -217,7 +217,7 @@ est <- reshape2::melt(est) # make a long format for ggplot
 #change var and response names
 levels(est$variable) <- list("Habitat with no removal"="HASAve_no_removal","Habitat with removal"="HASAve_w_removal", "Lionfish with no removal"="LFTADen_no_removal", "Lionfish with removal"="LFTADen_w_removal","Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
 est$response <- as.factor(est$response)
-levels(est$response) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
+levels(est$response) <- list("Nitrogen range"="dNr","Carbon range"="dCr","Total area"="TA")
 ```
 
 ```{r coefficient-plot, fig.width=6, fig.height=6.5}
@@ -277,7 +277,7 @@ p <- reshape2::melt(pred, variable.name = "site_i", value.name = "predicted")
 p <- p %>% group_by(response, site_i) %>%
   summarise(predicted = mean(predicted))
 
-obs <- select(d_sum, Site:SDNND, lat, lon) %>%
+obs <- select(d_sum, Site:TA, lat, lon) %>%
   reshape2::melt(id.vars = c("Site", "lat", "lon"), variable.name = "response", 
     value.name = "observed")
 
@@ -370,7 +370,7 @@ pp$HASAve_raw <- pp$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
 pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
 
 pp$.id <- as.factor(pp$.id)
-levels(pp$.id) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
+levels(pp$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
 
 d_sum_long <- d_sum %>% select(-ends_with("sd"), -LFRnAve) %>% 
   tidyr::gather(.id, value, -lat, -lon, -Site, -LFTADen, -HASAve, -RemovTreat)
@@ -388,7 +388,7 @@ d_sum_long <- mutate(d_sum_long, value_at_mean_HASAve = value - b1 * HASAve)
 d_sum_long <- mutate(d_sum_long, value_at_mean_LFTADen = value - b2 * LFTADen)
 
 d_sum_long$.id <- as.factor(d_sum_long$.id)
-levels(d_sum_long$.id) <- list("Nitrogen range"="dNr","Total area"="TA","MNND"="MNND","SDNND"="SDNND")
+levels(d_sum_long$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
 
 cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
 g <- filter(pp, HASAve == 0) %>% 
@@ -397,7 +397,7 @@ g <- filter(pp, HASAve == 0) %>%
   geom_line(lwd = 1) +
   geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
     alpha = 0.15, lwd = 0) +
-  labs(y = "Response value", x = "Lionfish density") +
+  labs(y = "Response value", x = expression(Lionfish~ density~ (per~ 100~ m^2))) +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
   theme_sleek() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
@@ -411,7 +411,7 @@ g <- filter(pp, LFTADen == 0) %>%
   geom_line(lwd = 1) +
   geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
     alpha = 0.15, lwd = 0) +
-  labs(y = "Response value", x = "HASAve") +
+  labs(y = "Response value", x = "Habitat complexity score") +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
   theme_sleek() +
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
