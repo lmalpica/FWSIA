@@ -403,7 +403,7 @@ g <- filter(pp, HASAve == 0) %>%
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
     y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
-ggsave("figs/predictions-den.pdf", width = 9.5, height = 5)
+ggsave("figs/predictions-den.pdf", width = 12, height = 4)
 
 g <- filter(pp, LFTADen == 0) %>% 
   ggplot(aes(HASAve_raw, exp(med), colour = `Lionfish removed`)) + 
@@ -417,5 +417,5 @@ g <- filter(pp, LFTADen == 0) %>%
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
     y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
-ggsave("figs/predictions-hab.pdf", width = 9.5, height = 5)
+ggsave("figs/predictions-hab.pdf", width = 12, height = 4)
 ```
