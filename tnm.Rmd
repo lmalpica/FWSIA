@@ -70,6 +70,21 @@ d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve),
 d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
 ```
 
+Plot to add as suplementary material input trophic niche  distributions
+
+```{r, fig.width=12, fig.height=10}
+d_ave <- group_by(d, Site) %>% summarize_all(mean)
+d_ave <- select(d_ave, Site:TA) %>% reshape2::melt(id.vars = "Site")
+d_post <- select(d, Site:TA) %>% reshape2::melt(id.vars = "Site")
+
+ggplot(d_post, aes(value)) + geom_histogram(bins = 130) +
+  facet_grid(Site~variable, scales = "free") +
+  geom_vline(data = d_ave, aes(xintercept = value), colour = "red") +
+  labs(y = "Count", x = "Response value") +
+  theme_sleek()
+ggsave("figs/1stposteriors.pdf", width = 8, height = 10)
+```
+
 The following plot shows the log transformed response data with our mean of the log transformed response data overlaid with a red line. For the most part these look approximately normally distributed and so our summary makes sense. The one variable that is a little bit off is SDNND. Still, I imagine this is close enough. If we wanted to get fancy, we could summarize these with something more flexible like a Gamma distribution.
 
 ```{r, fig.width=12, fig.height=10}
