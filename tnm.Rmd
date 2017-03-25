@@ -64,8 +64,8 @@ d_sum <- data.frame(d_means, d_sds)
 d_raw <- d_sum # save
 
 d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve), 
-  LFTADen = arm::rescale(log(LFTADen)), # NOTE LOG!!
-  RemovTreat = arm::rescale(RemovTreat))
+  LFTADen = arm::rescale((LFTADen)), # NOT LOGGED!!
+  RemovTreat = (RemovTreat)) #NOT CENTERED
 
 d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
 ```
@@ -183,12 +183,12 @@ The following function will format the data and fit the model for a given respon
 newdata_den <- expand.grid(HASAve = 0, 
   LFTADen = seq(min(d_sum$LFTADen), 
     max(d_sum$LFTADen), length.out = 150),
-  RemovTreat = c(0.5, -0.5),
+  RemovTreat = c(1, 0),
   y = 0) # ignore y
 newdata_hab <- expand.grid(
   HASAve = seq(min(d_sum$HASAve), max(d_sum$HASAve), length.out = 150), 
   LFTADen = 0,
-  RemovTreat = c(0.5, -0.5),
+  RemovTreat = c(1, 0),
   y = 0) # ignore y
 newdata <- bind_rows(newdata_den, newdata_hab)
 X_new <- model.matrix(y ~ 0 + (HASAve + LFTADen) * RemovTreat, data = newdata)
@@ -221,16 +221,16 @@ p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
 pred <- select(p, .id, starts_with("y_pred"), -contains("new")) %>% rename(response = `.id`)
 est <- select(p, .id, starts_with("beta")) %>% rename(response = `.id`)
 names(est)[2:6] <- names(as.data.frame(X))
-est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
-  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`,
-  HASAve_w_removal = HASAve + 0.5 * `HASAve:RemovTreat`,
-  HASAve_no_removal = HASAve - 0.5 * `HASAve:RemovTreat`)
+#est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
+#  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`,
+#  HASAve_w_removal = HASAve + 0.5 * `HASAve:RemovTreat`,
+#  HASAve_no_removal = HASAve - 0.5 * `HASAve:RemovTreat`)
 est <- reshape2::melt(est) # make a long format for ggplot
 ```
 
 ```{r}
 #change var and response names
-levels(est$variable) <- list("Habitat with no removal"="HASAve_no_removal","Habitat with removal"="HASAve_w_removal", "Lionfish with no removal"="LFTADen_no_removal", "Lionfish with removal"="LFTADen_w_removal","Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
+levels(est$variable) <- list("Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
 est$response <- as.factor(est$response)
 levels(est$response) <- list("Nitrogen range"="dNr","Carbon range"="dCr","Total area"="TA")
 ```
@@ -376,22 +376,22 @@ Similar, but subtly different models as checks (ignore).
 pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
 pp <- plyr::ldply(pp, function(x) {
   data.frame(X_new, 
-    l = apply(x, 2, quantile, probs = 0.1),
-    u = apply(x, 2, quantile, probs = 0.9),
+    l = apply(x, 2, quantile, probs = 0.2),
+    u = apply(x, 2, quantile, probs = 0.8),
     med = apply(x, 2, median))
 })
-pp$LFTADen_raw <- exp(pp$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+pp$LFTADen_raw <- pp$LFTADen * 2 * sd(d_raw$LFTADen) + mean(d_raw$LFTADen)
 pp$HASAve_raw <- pp$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
-pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
+pp <- mutate(pp, `Lionfish removed` = ifelse(RemovTreat == 1, "Yes", "No"))
 
 pp$.id <- as.factor(pp$.id)
 levels(pp$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
 
 d_sum_long <- d_sum %>% select(-ends_with("sd"), -LFRnAve) %>% 
   tidyr::gather(.id, value, -lat, -lon, -Site, -LFTADen, -HASAve, -RemovTreat)
-d_sum_long$LFTADen_raw <- exp(d_sum_long$LFTADen * 2 * sd(log(d_raw$LFTADen)) + mean(log(d_raw$LFTADen)))
+d_sum_long$LFTADen_raw <- d_sum_long$LFTADen * 2 * sd(d_raw$LFTADen) + mean(d_raw$LFTADen)
 d_sum_long$HASAve_raw <- d_sum_long$HASAve * 2 * sd(d_raw$HASAve) + mean(d_raw$HASAve)
-d_sum_long <- mutate(d_sum_long, `Lionfish removed` = ifelse(RemovTreat == 0.5, "Yes", "No"))
+d_sum_long <- mutate(d_sum_long, `Lionfish removed` = ifelse(RemovTreat == 1, "Yes", "No"))
 
 b_s <- plyr::ldply(out_cent, function(x) {
   data.frame(b1 = median(extract(x)$beta[,which(colnames(X) == "HASAve")]),
