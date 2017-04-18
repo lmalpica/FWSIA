@@ -64,7 +64,7 @@ d_sum <- data.frame(d_means, d_sds)
 d_raw <- d_sum # save
 
 d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve), 
-  LFTADen = arm::rescale((LFTADen)), # NOT LOGGED!!
+  LFTADen = arm::rescale(LFTADen), # NOT LOGGED!!
   RemovTreat = (RemovTreat)) #NOT CENTERED
 
 d_sum <- d_sum %>% left_join(readr::read_csv("data/SiteCoords.csv"))
@@ -181,12 +181,13 @@ The following function will format the data and fit the model for a given respon
 
 ```{r}
 newdata_den <- expand.grid(HASAve = 0, 
-  LFTADen = seq(min(d_sum$LFTADen), 
-    max(d_sum$LFTADen), length.out = 150),
+  # LFTADen_raw = seq(1, 50, length.out = 150),
+  LFTADen = (seq(1, 50, length.out = 150) - mean(d_raw$LFTADen)) / (2 * sd(d_raw$LFTADen)),
   RemovTreat = c(1, 0),
   y = 0) # ignore y
 newdata_hab <- expand.grid(
-  HASAve = seq(min(d_sum$HASAve), max(d_sum$HASAve), length.out = 150), 
+  # HASAve_raw = seq(1, 5, length.out = 150),
+  HASAve = (seq(1, 5, length.out = 150) - mean(d_raw$HASAve)) / (2 * sd(d_raw$HASAve)), 
   LFTADen = 0,
   RemovTreat = c(1, 0),
   y = 0) # ignore y
@@ -200,7 +201,7 @@ fit_tnm <- function(response) {
     K = ncol(X), X = X, N_new = nrow(X_new), X_new = X_new)
   m <- stan("tnm-meas.stan", data = stan_dat,
     pars = c("y", "y_raw"), include = FALSE, control = list(adapt_delta = 0.99), 
-    iter = 3000, chains = 4)
+    iter = 4000, chains = 4)
   m
 }
 ```
@@ -247,22 +248,22 @@ cis <- est %>%
 est$response = with(est, factor(response, levels = rev(levels(response))))
 cis$response = with(cis, factor(response, levels = rev(levels(response))))
 
-labs <- c(0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5)
-ggplot(est, aes(variable, value, fill = response, colour = response)) + 
-  geom_hline(yintercept = 0, lty = 2) + xlab("") +
-  scale_y_continuous(breaks = log(labs), labels = labs, limits = range(log(labs))) +
-  geom_violin(position = position_dodge(width = 0.8), alpha = 0.5) +
+labs <- c(0.4, 0.5, 1, 2, 3.5)
+ggplot(est, aes(variable, value, fill = response)) + 
+  geom_hline(yintercept = 0, lty = 2, col = "grey50") + xlab("") +
+  scale_y_continuous(breaks = log(labs[-c(1, 5)]), labels = labs[-c(1, 5)], limits = range(log(labs))) +
+  geom_violin(position = position_dodge(width = 0.8), alpha = 1, lwd = 0.1, col = NA) +
   coord_flip() +
-  viridis::scale_fill_viridis(discrete = TRUE) +
-  viridis::scale_color_viridis(discrete = TRUE) +
+  scale_fill_brewer(palette = "Pastel2") +
   theme_sleek() +
-  ylab("Coefficient estimate") +
+  ylab("Coefficient estimate\n(Multiplicative effect per 2 SDs)") +
   geom_point(data = cis, aes(x = variable, y = m), col = "grey20", cex = 0.9,
     position = position_dodge(width = 0.8)) +
   geom_linerange(data = cis, aes(x = variable, ymin = l, ymax = u, group = response),
     lwd = 0.4, col = "grey20", position = position_dodge(width = 0.8), inherit.aes = FALSE) +
-  guides(colour = guide_legend(reverse=TRUE), fill = guide_legend(reverse=TRUE))
-ggsave("figs/tnm-estimates.pdf", width = 6, height = 6.5)
+  guides(colour = guide_legend(reverse=TRUE), fill = guide_legend(reverse=TRUE)) +
+  labs(fill = "Response", colour = "Response")
+ggsave("figs/tnm-estimates.pdf", width = 5.5, height = 5.5)
 ```
 
 In the above plot, I labeled the x axis with the exponentiated versions of the coefficients. These are the multiplicative effects. So, for example, a value of 0.6 means that the response will be 60% of what it was if the predictor increases by 2 standard deviations (or in the case of the treatment, the lionfish are removed).
@@ -277,7 +278,7 @@ sum_table <- est %>% group_by(variable, response) %>%
 knitr::kable(sum_table)
 ```
 
-Here's what I see:  *(numbers might have changed slightly)*  *TODO NUMBERS DIFFERENT, NOW LOGGED*
+Here's what I see:  *(numbers might have changed slightly)*  *TODO NUMBERS DIFFERENT*
 
 - None of these effects are overly strong 
 - There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
@@ -376,8 +377,8 @@ Similar, but subtly different models as checks (ignore).
 pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
 pp <- plyr::ldply(pp, function(x) {
   data.frame(X_new, 
-    l = apply(x, 2, quantile, probs = 0.2),
-    u = apply(x, 2, quantile, probs = 0.8),
+    l = apply(x, 2, quantile, probs = 0.25),
+    u = apply(x, 2, quantile, probs = 0.75),
     med = apply(x, 2, median))
 })
 pp$LFTADen_raw <- pp$LFTADen * 2 * sd(d_raw$LFTADen) + mean(d_raw$LFTADen)
@@ -410,27 +411,27 @@ g <- filter(pp, HASAve == 0) %>%
   ggplot(aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
   facet_wrap(~.id, scales = "free_y") +
   geom_line(lwd = 1) +
-  geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
-    alpha = 0.15, lwd = 0) +
+  geom_ribbon(aes(x = LFTADen_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
+    alpha = 0.15, inherit.aes = FALSE) +
   labs(y = "Response value", x = expression(Lionfish~ density~ (per~ 100~ m^2))) +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
   theme_sleek() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
     y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
-ggsave("figs/predictions-den.pdf", width = 12, height = 4)
+ggsave("figs/predictions-den.pdf", width = 10, height = 3)
 
 g <- filter(pp, LFTADen == 0) %>% 
   ggplot(aes(HASAve_raw, exp(med), colour = `Lionfish removed`)) + 
   facet_wrap(~.id, scales = "free_y") +
   geom_line(lwd = 1) +
-  geom_ribbon(aes(ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
-    alpha = 0.15, lwd = 0) +
+  geom_ribbon(aes(x = HASAve_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
+    alpha = 0.15, inherit.aes = FALSE) +
   labs(y = "Response value", x = "Habitat complexity score") +
   scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
   theme_sleek() +
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
     y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
-ggsave("figs/predictions-hab.pdf", width = 12, height = 4)
+ggsave("figs/predictions-hab.pdf", width = 10, height = 3)
 ```
