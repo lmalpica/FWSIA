@@ -182,12 +182,12 @@ The following function will format the data and fit the model for a given respon
 ```{r}
 newdata_den <- expand.grid(HASAve = 0, 
   # LFTADen_raw = seq(1, 50, length.out = 150),
-  LFTADen = (seq(1, 50, length.out = 150) - mean(d_raw$LFTADen)) / (2 * sd(d_raw$LFTADen)),
+  LFTADen = (seq(0, 7, length.out = 150) - mean(d_raw$LFTADen)) / (2 * sd(d_raw$LFTADen)),
   RemovTreat = c(1, 0),
   y = 0) # ignore y
 newdata_hab <- expand.grid(
   # HASAve_raw = seq(1, 5, length.out = 150),
-  HASAve = (seq(1, 5, length.out = 150) - mean(d_raw$HASAve)) / (2 * sd(d_raw$HASAve)), 
+  HASAve = (seq(1.5, 3, length.out = 150) - mean(d_raw$HASAve)) / (2 * sd(d_raw$HASAve)), 
   LFTADen = 0,
   RemovTreat = c(1, 0),
   y = 0) # ignore y
@@ -248,7 +248,7 @@ cis <- est %>%
 est$response = with(est, factor(response, levels = rev(levels(response))))
 cis$response = with(cis, factor(response, levels = rev(levels(response))))
 
-labs <- c(0.4, 0.5, 1, 2, 4.5)
+labs <- c(0.4, 0.5, 1, 2, 5)
 ggplot(est, aes(variable, value, fill = response)) + 
   geom_hline(yintercept = 0, lty = 2, col = "grey50") + xlab("") +
   scale_y_continuous(breaks = log(labs[-c(1, 5)]), labels = labs[-c(1, 5)], limits = range(log(labs))) +
@@ -407,7 +407,7 @@ d_sum_long <- mutate(d_sum_long, value_at_mean_LFTADen = value - b2 * LFTADen)
 d_sum_long$.id <- as.factor(d_sum_long$.id)
 levels(d_sum_long$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
 
-cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
+#cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
 g <- filter(pp, HASAve == 0) %>% 
   ggplot(aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
   facet_wrap(~.id, scales = "free_y") +
@@ -415,8 +415,9 @@ g <- filter(pp, HASAve == 0) %>%
   geom_ribbon(aes(x = LFTADen_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
     alpha = 0.15, inherit.aes = FALSE) +
   labs(y = "Response value", x = expression(Lionfish~ density~ (per~ 100~ m^2))) +
-  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-  theme_sleek() +
+#  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
+   viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
+    theme_sleek() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
     y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
@@ -429,8 +430,9 @@ g <- filter(pp, LFTADen == 0) %>%
   geom_ribbon(aes(x = HASAve_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
     alpha = 0.15, inherit.aes = FALSE) +
   labs(y = "Response value", x = "Habitat complexity score") +
-  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-  theme_sleek() +
+#  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
+   viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
+    theme_sleek() +
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
     y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
 g
