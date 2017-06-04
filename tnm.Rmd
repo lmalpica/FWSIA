@@ -227,13 +227,14 @@ names(est)[2:6] <- names(as.data.frame(X))
 #  HASAve_w_removal = HASAve + 0.5 * `HASAve:RemovTreat`,
 #  HASAve_no_removal = HASAve - 0.5 * `HASAve:RemovTreat`)
 est <- reshape2::melt(est) # make a long format for ggplot
+est <- dplyr::arrange(est,response) # to place Carbon range first in figure
 ```
 
 ```{r}
 #change var and response names
 levels(est$variable) <- list("Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
 est$response <- as.factor(est$response)
-levels(est$response) <- list("Nitrogen range"="dNr","Carbon range"="dCr","Total area"="TA")
+levels(est$response) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
 ```
 
 ```{r coefficient-plot, fig.width=6, fig.height=6.5}
