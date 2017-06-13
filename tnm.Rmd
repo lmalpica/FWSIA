@@ -249,14 +249,15 @@ cis <- est %>%
 est$response = with(est, factor(response, levels = rev(levels(response))))
 cis$response = with(cis, factor(response, levels = rev(levels(response))))
 
-labs <- c(0.4, 0.5, 1, 2, 5)
+labs <- c(0.4, 0.5, 1, 2, 3.5)
 ggplot(est, aes(variable, value, fill = response)) + 
   geom_hline(yintercept = 0, lty = 2, col = "grey50") + xlab("") +
   scale_y_continuous(breaks = log(labs[-c(1, 5)]), labels = labs[-c(1, 5)], limits = range(log(labs))) +
   geom_violin(position = position_dodge(width = 0.8), alpha = 0.6, lwd = 0.1, col = NA) +
   coord_flip() +
-  viridis::scale_fill_viridis(discrete = TRUE) +
-  viridis::scale_color_viridis(discrete = TRUE) +
+ scale_fill_brewer(palette = "Pastel2") +
+#  viridis::scale_fill_viridis(discrete = TRUE) +
+#  viridis::scale_color_viridis(discrete = TRUE) +
   theme_sleek() +
   ylab("Coefficient estimate\n(Multiplicative effect per 2 SDs)") +
   geom_point(data = cis, aes(x = variable, y = m), col = "grey20", cex = 0.9,
@@ -265,7 +266,7 @@ ggplot(est, aes(variable, value, fill = response)) +
     lwd = 0.4, col = "grey20", position = position_dodge(width = 0.8), inherit.aes = FALSE) +
   guides(colour = guide_legend(reverse=TRUE), fill = guide_legend(reverse=TRUE)) +
   labs(fill = "Response", colour = "Response")
-ggsave("figs/tnm-estimates.pdf", width = 5.5, height = 5.5,useDingbats = F)
+ggsave("figs/tnm-estimates1.pdf", width = 5.5, height = 5.5,useDingbats = F)
 ```
 
 In the above plot, I labeled the x axis with the exponentiated versions of the coefficients. These are the multiplicative effects. So, for example, a value of 0.6 means that the response will be 60% of what it was if the predictor increases by 2 standard deviations (or in the case of the treatment, the lionfish are removed).
@@ -379,8 +380,8 @@ Similar, but subtly different models as checks (ignore).
 pp <- lapply(out_cent, function(x) extract(x)$y_pred_new)
 pp <- plyr::ldply(pp, function(x) {
   data.frame(X_new, 
-    l = apply(x, 2, quantile, probs = 0.25),
-    u = apply(x, 2, quantile, probs = 0.75),
+    l = apply(x, 2, quantile, probs = 0.20),
+    u = apply(x, 2, quantile, probs = 0.80),
     med = apply(x, 2, median))
 })
 pp$LFTADen_raw <- pp$LFTADen * 2 * sd(d_raw$LFTADen) + mean(d_raw$LFTADen)
@@ -410,32 +411,38 @@ levels(d_sum_long$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Tota
 
 #cols <- c(RColorBrewer::brewer.pal(4, "Greys")[[3]], RColorBrewer::brewer.pal(4, "Blues")[[3]])
 g <- filter(pp, HASAve == 0) %>% 
-  ggplot(aes(LFTADen_raw, exp(med), colour = `Lionfish removed`)) + 
+  ggplot(aes(LFTADen_raw, exp(med), linetype = `Lionfish removed`, color = .id)) + 
   facet_wrap(~.id, scales = "free_y") +
-  geom_line(lwd = 1) +
-  geom_ribbon(aes(x = LFTADen_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
-    alpha = 0.15, inherit.aes = FALSE) +
+  geom_line(lwd = 1.5) +
+  geom_ribbon(aes(x = LFTADen_raw, ymax = exp(u), ymin = exp(l), fill = .id), 
+    alpha = 0.2, inherit.aes = TRUE) +
   labs(y = "Response value", x = expression(Lionfish~ density~ (per~ 100~ m^2))) +
+  scale_color_brewer(palette = "Pastel2",direction=-1) + scale_fill_brewer(palette = "Pastel2",direction=-1) +
 #  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-   viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
-    theme_sleek() +
+#   viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
+  aes(fill = as.factor(.id)) +
+  theme_sleek() +
   geom_point(data = d_sum_long, aes(x = LFTADen_raw,
-    y = exp(value_at_mean_HASAve), colour = `Lionfish removed`), inherit.aes = FALSE)
+    y = exp(value_at_mean_HASAve), shape = `Lionfish removed`), inherit.aes = TRUE, size = 2) +
+  scale_shape_manual(values = c(16,1))
 g
-ggsave("figs/predictions-den.pdf", width = 10, height = 3)
+ggsave("figs/predictions-den1.pdf", width = 10, height = 3)
 
 g <- filter(pp, LFTADen == 0) %>% 
-  ggplot(aes(HASAve_raw, exp(med), colour = `Lionfish removed`)) + 
+  ggplot(aes(HASAve_raw, exp(med), linetype = `Lionfish removed`, color = .id)) + 
   facet_wrap(~.id, scales = "free_y") +
-  geom_line(lwd = 1) +
-  geom_ribbon(aes(x = HASAve_raw, ymax = exp(u), ymin = exp(l), fill = `Lionfish removed`), 
-    alpha = 0.15, inherit.aes = FALSE) +
+  geom_line(lwd = 1.5) +
+  geom_ribbon(aes(x = HASAve_raw, ymax = exp(u), ymin = exp(l), fill = .id), 
+    alpha = 0.2, inherit.aes = TRUE) +
   labs(y = "Response value", x = "Habitat complexity score") +
+  scale_color_brewer(palette = "Pastel2",direction=-1) + scale_fill_brewer(palette = "Pastel2",direction=-1) +
 #  scale_color_manual(values = cols) + scale_fill_manual(values = cols) +
-   viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
-    theme_sleek() +
+#  viridis::scale_color_viridis(begin = 0.1,end = 0.93,discrete = TRUE) +
+  aes(fill = as.factor(.id)) +
+  theme_sleek() +
   geom_point(data = d_sum_long, aes(x = HASAve_raw,
-    y = exp(value_at_mean_LFTADen), colour = `Lionfish removed`), inherit.aes = FALSE)
+    y = exp(value_at_mean_LFTADen), shape = `Lionfish removed`), inherit.aes = TRUE, size = 2) +
+  scale_shape_manual(values = c(16,1))
 g
-ggsave("figs/predictions-hab.pdf", width = 10, height = 3)
+ggsave("figs/predictions-hab1.pdf", width = 10, height = 3)
 ```
