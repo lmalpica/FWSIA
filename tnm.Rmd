@@ -351,7 +351,7 @@ intervals_rounded <- intervals %>%
 knitr::kable(intervals_rounded)
 
 # on raw habitat scale:
-filter(est_all, variable == "Habitat") %>%
+filter(est_all, variable == "HASAve") %>%
   group_by(response) %>%
   summarize(
     q0.025 = quantile(exp(value / HASAve_2sd), probs = 0.025),
@@ -363,7 +363,7 @@ filter(est_all, variable == "Habitat") %>%
   knitr::kable()
 
 # on raw L.F. density scale:
-filter(est_all, variable == "Lionfish") %>%
+filter(est_all, variable == "LFTADen") %>%
   group_by(response) %>%
   summarize(
     q0.025 = quantile(exp(value / LFTADen_2sd), probs = 0.025),
