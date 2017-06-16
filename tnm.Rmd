@@ -358,7 +358,9 @@ filter(est_all, variable == "Habitat") %>%
     q0.25 = quantile(exp(value / HASAve_2sd), probs = 0.25),
     q0.5 = quantile(exp(value / HASAve_2sd), probs = 0.5),
     q0.75 = quantile(exp(value / HASAve_2sd), probs = 0.75),
-    q0.975 = quantile(exp(value / HASAve_2sd), probs = 0.975))
+    q0.975 = quantile(exp(value / HASAve_2sd), probs = 0.975)) %>% 
+  mutate_at(vars(q0.025:q0.975), round, digits = 2) %>% 
+  knitr::kable()
 
 # on raw L.F. density scale:
 filter(est_all, variable == "Lionfish") %>%
@@ -368,7 +370,9 @@ filter(est_all, variable == "Lionfish") %>%
     q0.25 = quantile(exp(value / LFTADen_2sd), probs = 0.25),
     q0.5 = quantile(exp(value / LFTADen_2sd), probs = 0.5),
     q0.75 = quantile(exp(value / LFTADen_2sd), probs = 0.75),
-    q0.975 = quantile(exp(value / LFTADen_2sd), probs = 0.975))
+    q0.975 = quantile(exp(value / LFTADen_2sd), probs = 0.975)) %>% 
+  mutate_at(vars(q0.025:q0.975), round, digits = 2) %>% 
+  knitr::kable()
 ```
 
 # brms package checks
