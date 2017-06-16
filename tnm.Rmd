@@ -63,6 +63,9 @@ d_sum <- data.frame(d_means, d_sds)
 
 d_raw <- d_sum # save
 
+HASAve_2sd <- sd(d_sum$HASAve)*2
+LFTADen_2sd <- sd(d_sum$LFTADen)*2
+
 d_sum <- d_sum %>% mutate(HASAve = arm::rescale(HASAve), 
   LFTADen = arm::rescale(LFTADen), # NOT LOGGED!!
   RemovTreat = (RemovTreat)) #NOT CENTERED
@@ -222,16 +225,16 @@ p <- plyr::ldply(out_cent, stanhelpers::extract_df, output = "wide_df")
 pred <- select(p, .id, starts_with("y_pred"), -contains("new")) %>% rename(response = `.id`)
 est <- select(p, .id, starts_with("beta")) %>% rename(response = `.id`)
 names(est)[2:6] <- names(as.data.frame(X))
-#est <- mutate(est, LFTADen_w_removal = LFTADen + 0.5 * `LFTADen:RemovTreat`,
-#  LFTADen_no_removal = LFTADen - 0.5 * `LFTADen:RemovTreat`,
-#  HASAve_w_removal = HASAve + 0.5 * `HASAve:RemovTreat`,
-#  HASAve_no_removal = HASAve - 0.5 * `HASAve:RemovTreat`)
+est <- mutate(est, LFTADen_w_removal = LFTADen + `LFTADen:RemovTreat`,
+ HASAve_w_removal = HASAve + `HASAve:RemovTreat`)
 est <- reshape2::melt(est) # make a long format for ggplot
 est <- dplyr::arrange(est,response) # to place Carbon range first in figure
 ```
 
 ```{r}
 #change var and response names
+est_all <- est
+est <- filter(est_all, !variable %in% c("HASAve_w_removal", "LFTADen_w_removal"))
 levels(est$variable) <- list("Lionfish:Removal"="LFTADen:RemovTreat","Habitat:Removal"="HASAve:RemovTreat","Removal"="RemovTreat","Lionfish"="LFTADen","Habitat"="HASAve")
 est$response <- as.factor(est$response)
 levels(est$response) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
@@ -274,20 +277,12 @@ In the above plot, I labeled the x axis with the exponentiated versions of the c
 We can calculate the probability a given coefficient is above or less than 0 (i.e. the multiplicative effect is above or below 1) (because this is a Bayesian model). You can use these values when you report results. We can also calculate lots of other things depending on what would be meaningful (e.g. credible intervals on the effects).
 
 ```{r}
-sum_table <- est %>% group_by(variable, response) %>% 
+sum_table <- est_all %>% group_by(variable, response) %>%
   summarize(
     prob_less_0 = round(sum(value < 0)/n(), 2),
     prob_above_0 = round(sum(value > 0)/n(), 2))
 knitr::kable(sum_table)
 ```
-
-Here's what I see:  *(numbers might have changed slightly)*  *TODO NUMBERS DIFFERENT*
-
-- None of these effects are overly strong 
-- There's a reasonably high probability that most of the responses are lower in the case of lionfish removals (for a site with average lionfish density) (see the `RemovTreat` effect). For example, there is about a 95% probability this is true for `TA` and about a 88% probability this is true for `CD` and `dCr`.
-- There is a fairly high probability (ranging from 0.6 to 0.93) that some of these responses (TA, dCr, dNr) are negatively related with lionfish density (`LFTADen`). This is for an average site, or in other words across all sites including those with and without removals. 
-- The effect of lionfish density looks a bit stronger (negative) in the case of no removals `LFTADen_no_removal`, BUT the interaction between lionfish density and treatment is very weak (or at least very uncertain) (see `LFTADen:RemovTreat`).
-- There is weak evidence for an effect of the habitat variable on the responses with the exception of positive relationship between the habitat variables and `dNr` and `MMND`, with ~0.98 or 0.99 probability for the latter. (`HASAve`)
 
 # Residuals
 
@@ -342,18 +337,38 @@ Looks great.
 # Credible intervals 
 
 ```{r}
-intervals <- group_by(est, response, variable) %>%
+intervals <- group_by(est_all, response, variable) %>%
   summarize(
-    q0.025 = quantile(value, probs = 0.025),
-    q0.25 = quantile(value, probs = 0.25),
-    q0.5 = quantile(value, probs = 0.5),
-    q0.75 = quantile(value, probs = 0.75),
-    q0.975 = quantile(value, probs = 0.975))
+    q0.025 = quantile(exp(value), probs = 0.025),
+    q0.25 = quantile(exp(value), probs = 0.25),
+    q0.5 = quantile(exp(value), probs = 0.5),
+    q0.75 = quantile(exp(value), probs = 0.75),
+    q0.975 = quantile(exp(value), probs = 0.975))
 
 intervals_rounded <- intervals %>% 
   mutate_at(vars(q0.025:q0.975), round, digits = 2)
 
 knitr::kable(intervals_rounded)
+
+# on raw habitat scale:
+filter(est_all, variable == "Habitat") %>%
+  group_by(response) %>%
+  summarize(
+    q0.025 = quantile(exp(value / HASAve_2sd), probs = 0.025),
+    q0.25 = quantile(exp(value / HASAve_2sd), probs = 0.25),
+    q0.5 = quantile(exp(value / HASAve_2sd), probs = 0.5),
+    q0.75 = quantile(exp(value / HASAve_2sd), probs = 0.75),
+    q0.975 = quantile(exp(value / HASAve_2sd), probs = 0.975))
+
+# on raw L.F. density scale:
+filter(est_all, variable == "Lionfish") %>%
+  group_by(response) %>%
+  summarize(
+    q0.025 = quantile(exp(value / LFTADen_2sd), probs = 0.025),
+    q0.25 = quantile(exp(value / LFTADen_2sd), probs = 0.25),
+    q0.5 = quantile(exp(value / LFTADen_2sd), probs = 0.5),
+    q0.75 = quantile(exp(value / LFTADen_2sd), probs = 0.75),
+    q0.975 = quantile(exp(value / LFTADen_2sd), probs = 0.975))
 ```
 
 # brms package checks
