@@ -80,12 +80,16 @@ d_ave <- group_by(d, Site) %>% summarize_all(mean)
 d_ave <- select(d_ave, Site:TA) %>% reshape2::melt(id.vars = "Site")
 d_post <- select(d, Site:TA) %>% reshape2::melt(id.vars = "Site")
 
-ggplot(d_post, aes(value)) + geom_histogram(bins = 130) +
+levels(d_post$variable) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
+levels(d_ave$variable) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Total area"="TA")
+
+ggplot(d_post, aes(value)) + geom_histogram(bins = 150) +
   facet_grid(Site~variable, scales = "free") +
   geom_vline(data = d_ave, aes(xintercept = value), colour = "red") +
   labs(y = "Count", x = "Response value") +
+  xlim(0, 22) +
   theme_sleek()
-ggsave("figs/1stposteriors.pdf", width = 8, height = 10)
+ggsave("figs/1stposteriorsb.pdf", width = 8, height = 10)
 ```
 
 The following plot shows the log transformed response data with our mean of the log transformed response data overlaid with a red line. For the most part these look approximately normally distributed and so our summary makes sense. The one variable that is a little bit off is SDNND. Still, I imagine this is close enough. If we wanted to get fancy, we could summarize these with something more flexible like a Gamma distribution.
@@ -432,7 +436,7 @@ levels(d_sum_long$.id) <- list("Carbon range"="dCr","Nitrogen range"="dNr","Tota
 g <- filter(pp, HASAve == 0) %>% 
   ggplot(aes(LFTADen_raw, exp(med), linetype = `Lionfish removed`, color = .id)) + 
   facet_wrap(~.id, scales = "free_y") +
-  geom_line(lwd = 1.5) +
+  geom_line(lwd = 1) +
   geom_ribbon(aes(x = LFTADen_raw, ymax = exp(u), ymin = exp(l), fill = .id), 
     alpha = 0.2, inherit.aes = TRUE) +
   labs(y = "Response value", x = expression(Lionfish~ density~ (per~ 100~ m^2))) +
@@ -445,12 +449,12 @@ g <- filter(pp, HASAve == 0) %>%
     y = exp(value_at_mean_HASAve), shape = `Lionfish removed`), inherit.aes = TRUE, size = 2) +
   scale_shape_manual(values = c(16,1))
 g
-ggsave("figs/predictions-den1.pdf", width = 10, height = 3)
+ggsave("figs/predictions-den1.pdf", width = 10, height = 3,useDingbats = F)
 
 g <- filter(pp, LFTADen == 0) %>% 
   ggplot(aes(HASAve_raw, exp(med), linetype = `Lionfish removed`, color = .id)) + 
   facet_wrap(~.id, scales = "free_y") +
-  geom_line(lwd = 1.5) +
+  geom_line(lwd = 1) +
   geom_ribbon(aes(x = HASAve_raw, ymax = exp(u), ymin = exp(l), fill = .id), 
     alpha = 0.2, inherit.aes = TRUE) +
   labs(y = "Response value", x = "Habitat complexity score") +
@@ -463,5 +467,5 @@ g <- filter(pp, LFTADen == 0) %>%
     y = exp(value_at_mean_LFTADen), shape = `Lionfish removed`), inherit.aes = TRUE, size = 2) +
   scale_shape_manual(values = c(16,1))
 g
-ggsave("figs/predictions-hab1.pdf", width = 10, height = 3)
+ggsave("figs/predictions-hab1.pdf", width = 10, height = 3,useDingbats = F)
 ```
